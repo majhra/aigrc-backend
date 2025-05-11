@@ -3,10 +3,11 @@ import json
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from os.path import join
-from typing import Annotated
+from typing import Annotated, List, Optional
+from uuid import UUID
 
 import shortuuid
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from jinja2 import Template
@@ -39,6 +40,7 @@ from app.schemas import (
     UserPasswordResetVerify,
     UserSignup,
     UserUpdate,
+    UserResponse,
 )
 
 router = APIRouter()
@@ -451,80 +453,179 @@ async def read_own_items(
     return JSONResponse(content=[{"item_id": "Foo", "owner": current_user.email}])
 
 
-@router.get("/users")
-async def read_own_users(
-    current_user: Annotated[User, Depends(deps.get_current_active_user)]
-):
-    items = [
-        {"id": 1, "name": "Item 1", "owner": current_user.email},
-        {"id": 2, "name": "Item 2", "owner": current_user.email},
-        {"id": 3, "name": "Item 3", "owner": current_user.email}
-    ]
-    return JSONResponse(content=items)
-
-
-@router.get("/users/{user_id}")
-async def get_user_by_id(
-    user_id: int,
+@router.get("/users", response_model=List[UserResponse])
+async def list_users(
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
     logger: TLogger = Depends(deps.get_logger),
     user_store: StoreProtocol = Depends(deps.get_user_store),
 ):
-    # Example of getting a specific user - replace with actual database lookup
-    # This is just a mock response - you should implement actual user lookup logic
+    """
+    List all users with pagination. Admin only.
+    """
+    # TODO: Add admin role check
     try:
-        # Here you would typically query your database for the user
-        # For now, we'll return a mock response
-        user = get_user(user_id, user_store)
-        if user is None:
-            logger.info(f"User with email {user_id} does not exist")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Data"
-            )
-        user_details = {
-            "id": user_id,
-            "name": f"User {user_id}",
-            "email": current_user.email,  # In real implementation, this would be the requested user's email
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "is_verified": True
-        }
-        return JSONResponse(content=user_details)
+        # Get all users from store
+        users = user_store.get_all()
+        # Apply pagination
+        paginated_users = users[skip : skip + limit]
+        return JSONResponse(content=[UserResponse.model_validate(user).model_dump() for user in paginated_users])
     except Exception as e:
-        logger.info(f"User with email {user_id} does not exist")
+        logger.error(f"Error listing users: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with id {user_id} not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error retrieving users"
         )
 
-@router.put("/users/{user_id}")
-async def put_own_users(
-    user_id: int,
+@router.get("/users/{user_id}", response_model=UserResponse)
+async def get_user_by_id(
+    user_id: UUID,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     logger: TLogger = Depends(deps.get_logger),
     user_store: StoreProtocol = Depends(deps.get_user_store),
 ):
-    # Example of getting a specific user - replace with actual database lookup
-    # This is just a mock response - you should implement actual user lookup logic
+    """
+    Get a specific user by UUID.
+    """
     try:
-        # Here you would typically query your database for the user
-        # For now, we'll return a mock response
-        user = get_user(user_id, user_store)
+        # Try to get user by UUID
+        user = user_store.get(str(user_id))
+        
         if user is None:
-            logger.info(f"User with email {user_id} does not exist")
+            logger.info(f"User not found: {user_id}")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Data"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
             )
-        user_details = {
-            "id": user_id,
-            "name": f"User {user.full_name}",
-            "email": user.email,  
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "is_verified": True
-        }
-        return JSONResponse(content=user_details)
+            
+        # TODO: Add authorization check (admin or self)
+        return JSONResponse(content=UserResponse.model_validate(user).model_dump())
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.info(f"User with email {user_id} does not exist")
+        logger.error(f"Error retrieving user {user_id}: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with id {user_id} not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error retrieving user"
+        )
+
+@router.get("/users/email/{email}", response_model=UserResponse)
+async def get_user_by_email(
+    email: str,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    logger: TLogger = Depends(deps.get_logger),
+    user_store: StoreProtocol = Depends(deps.get_user_store),
+):
+    """
+    Get a specific user by email.
+    """
+    try:
+        # Get user by email using the email index
+        user_data = user_store.get_by_email(email)
+        
+        if user_data is None:
+            logger.info(f"User not found: {email}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+            
+        # TODO: Add authorization check (admin or self)
+        return JSONResponse(content=UserResponse.model_validate(user_data).model_dump())
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving user {email}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error retrieving user"
+        )
+
+@router.post("/users", response_model=UserResponse)
+async def create_user_admin(
+    user_data: UserSignup,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    logger: TLogger = Depends(deps.get_logger),
+    user_store: StoreProtocol = Depends(deps.get_user_store),
+):
+    """
+    Create a new user (admin only).
+    This is separate from the registration endpoint as it's for admin use.
+    """
+    # TODO: Add admin role check
+    try:
+        # Check if user already exists using email index
+        existing_user = user_store.get_by_email(user_data.email)
+        if existing_user is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User already exists"
+            )
+
+        user = User(
+            email=user_data.email,
+            password=get_password_hash(user_data.password),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,  # Admin-created users are pre-verified
+        )
+
+        # Store user with UUID as key - email index is handled by the store
+        user_store.put(str(user.id), user.model_dump())
+        
+        logger.info(f"Admin created user: {user.email} with ID {user.id}")
+        
+        return JSONResponse(content=UserResponse.model_validate(user).model_dump())
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error creating user"
+        )
+
+@router.put("/users/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: UUID,
+    user_update: UserUpdate,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    logger: TLogger = Depends(deps.get_logger),
+    user_store: StoreProtocol = Depends(deps.get_user_store),
+):
+    """
+    Update a user's details (admin or self).
+    """
+    try:
+        user_data = user_store.get(str(user_id))
+        if user_data is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        user = User.model_validate(user_data)
+        
+        # TODO: Add authorization check (admin or self)
+        
+        # Update user fields
+        for field, value in user_update.model_dump(exclude_unset=True).items():
+            if field == "password" and value is not None:
+                value = get_password_hash(value)
+            setattr(user, field, value)
+
+        # Update user - email index is handled by the store
+        user_store.put(str(user.id), user.model_dump())
+        
+        logger.info(f"Updated user: {user.email} with ID {user.id}")
+        
+        return JSONResponse(content=UserResponse.model_validate(user).model_dump())
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating user {user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error updating user"
         )

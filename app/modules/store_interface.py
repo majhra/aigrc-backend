@@ -12,6 +12,10 @@ class StoreProtocol(Protocol):
     def get(self, key: str) -> Dict[str, str] | None:
         pass
 
+    def get_by_email(self, email: str) -> Dict[str, str] | None:
+        """Get user by email using the email index"""
+        pass
+
     def keys(self) -> List[str] | None:
         pass
 
@@ -36,6 +40,7 @@ class RedisStore(StoreProtocol):
         self.prefix = prefix.lower()
         self.redis_id_name = f"{self.prefix}_id"
         self.redis_set_name = f"{self.prefix}_sorted_set"
+        self.email_index_name = f"{self.prefix}_email_index"  # New email index
 
         # Initialise the redis connection
         try:
@@ -99,10 +104,27 @@ class RedisStore(StoreProtocol):
 
         return obj.decode("utf-8")
 
+    def get_by_email(self, email: str) -> Dict[str, str] | None:
+        """
+        Get user by email using the email index
+        :param email: Email to look up
+        """
+        try:
+            # Get UUID from email index
+            user_id = self.redis.hget(self.email_index_name, email)
+            if not user_id:
+                return None
+            
+            # Get user data using UUID
+            return self.get(user_id.decode('utf-8'))
+        except Exception as e:
+            self.logger.error(f"Redis email lookup fail: {e}")
+            raise Exception(f"Redis email lookup fail: {e}")
+
     def put(self, key: str, value: dict):
         """
         Uploads data to Redis
-        :param key: Key to use for the data (the equivalent of a primary key)
+        :param key: UUID key to use for the data
         :param value: Data to upload
         """
         # Logging
@@ -136,6 +158,11 @@ class RedisStore(StoreProtocol):
         try:
             self.redis.hmset(hash_name, packed)
             self.redis.zadd(self.redis_set_name, {key: id})
+            
+            # Update email index if email is present
+            if 'email' in value and value['email']:
+                self.redis.hset(self.email_index_name, value['email'], key)
+                
         except Exception as e:
             self.logger.error(f"Redis upload fail: {e}")
             raise Exception(f"Redis upload fail: {e}")
@@ -202,7 +229,7 @@ class RedisStore(StoreProtocol):
     def pop(self, key: str):
         """
         Removes data from Redis
-        :param key: Unique key to remove data (the equivalent of a primary key)
+        :param key: UUID key to remove data
         """
         # Logging
         self.logger.info(f"Redis pop called: {key}")
@@ -228,6 +255,10 @@ class RedisStore(StoreProtocol):
 
         # Delete the hash
         try:
+            # Remove from email index if email exists
+            if 'email' in data:
+                self.redis.hdel(self.email_index_name, data['email'])
+            
             self.redis.delete(hash_name)
             self.redis.zrem(self.redis_set_name, key)
         except Exception as e:

@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Annotated
+import uuid
 
 from fastapi import Form
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, UUID4
 from pydantic.dataclasses import dataclass
 
 from app.api import utils
@@ -14,9 +15,12 @@ class Token(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id: int
+    id: UUID4
     email: str
+    full_name: str | None = None
     created_at: datetime
+    is_verified: bool
+    disabled: bool
 
 
 class RegistrationUserRepsonse(BaseModel):
@@ -29,7 +33,7 @@ class TokenData(BaseModel):
 
 
 class User(BaseModel):
-    # username: str # Removed - now uses email
+    id: UUID4 | None = None
     email: str | None = None
     full_name: str | None = None
     password: str | None = None
@@ -41,6 +45,12 @@ class User(BaseModel):
     verification_code_expires_at: datetime | None = None
     password_reset_code: str | None = None
     password_reset_code_expires_at: datetime | None = None
+
+    @field_validator("id", mode="before")
+    def set_id(cls, v):
+        if v is None:
+            return uuid.uuid4()
+        return v
 
 
 class UserInDB(User):
