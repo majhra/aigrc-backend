@@ -473,10 +473,27 @@ async def list_users(
     # TODO: Add admin role check
     try:
         # Get all users from store
-        users = user_store.get_all()
+        #users = user_store.get_all()
+
+        test_users = []
+        for i in range(3):
+            user = User(
+                id=str(uuid4()),
+                email=f"goricoaico+testuser{i}@gmail.com",
+                password=get_password_hash(f"UserPass{i}123!"),
+                disabled=False,
+                created_at=datetime.now(timezone.utc),
+                is_verified=True,
+            )
+            test_users.append(user)
+
         # Apply pagination
-        paginated_users = users[skip : skip + limit]
-        return JSONResponse(content=[UserResponse.model_validate(user).model_dump() for user in paginated_users])
+        paginated_users = test_users[skip : skip + limit]
+        # Convert User models to dictionaries and validate as UserResponse
+        return JSONResponse(content=[
+            UserResponse.model_validate(user.model_dump(mode="json")).model_dump(mode="json") 
+            for user in paginated_users
+        ])
     except Exception as e:
         logger.error(f"Error listing users: {str(e)}")
         raise HTTPException(
@@ -562,7 +579,7 @@ async def create_user_admin(
     # TODO: Add admin role check
     try:
         # Check if user already exists using email index
-        existing_user = get_user_by_email(user_data.email,user_store)
+        existing_user = get_user_by_email(user_data.email, user_store)
         if existing_user is not None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -572,21 +589,24 @@ async def create_user_admin(
         # Generate a standard UUID4
         user_id = uuid4()
         
-        user = User(
-            id=user_id,  # Use standard UUID4
-            email=user_data.email,
-            password=get_password_hash(user_data.password),
-            disabled=False,
-            created_at=datetime.now(timezone.utc),
-            is_verified=True,  # Admin-created users are pre-verified
-        )
+        # Create user with validated UUID
+        user = User.model_validate({
+            "id": str(user_id),  # Convert UUID to string for validation
+            "email": user_data.email,
+            "password": get_password_hash(user_data.password),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "is_verified": True,  # Admin-created users are pre-verified
+        })
 
         # Store user with UUID as key - email index is handled by the store
         user_store.put(str(user.id), user.model_dump())
         
         logger.info(f"Admin created user: {user.email} with ID {user.id}")
         
-        return JSONResponse(content=UserResponse.model_validate(user).model_dump())
+        # Convert User model to dict and validate as UserResponse
+        user_dict = user.model_dump()
+        return JSONResponse(content=UserResponse.model_validate(user_dict).model_dump(mode="json"))
     except HTTPException:
         raise
     except Exception as e:

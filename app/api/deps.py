@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from starlette.status import HTTP_403_FORBIDDEN
 
-from app.api.utils import get_logger, get_user
+from app.api.utils import get_logger, get_user_by_email
 from app.core.config import settings
 from app.modules.store_interface import RedisStore, StoreProtocol
 from app.modules.tlogger import TLogger
@@ -60,7 +60,7 @@ async def get_current_user(
     except JWTError as e:
         logger.error(f"JWTError: {e}")
         raise credentials_exception
-    user = get_user(token_data.email, user_store)
+    user = get_user_by_email(token_data.email, user_store)
     logger.info(
         f"user : {user.full_name}, email: {user.email}, disabled: {user.disabled}"
     )
@@ -102,7 +102,7 @@ async def get_current_user_safe(
     except:
         return None
 
-    user = get_user(token_data.email, user_store)
+    user = get_user_by_email(token_data.email, user_store)
 
     logger.info(
         f"user : {user.full_name}, email: {user.email}, disabled: {user.disabled}"

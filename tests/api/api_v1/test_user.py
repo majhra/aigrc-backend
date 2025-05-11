@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 import uuid
+import pytest
 from typing import Any
 
 from fastapi import status
@@ -11,6 +12,11 @@ from app.api.utils import get_password_hash
 from app.core.config import settings
 from app.schemas import User
 
+from app.api.utils import (
+    create_access_token,
+    get_password_hash,
+    get_user_by_email,
+)
 
 class UUIDMatcher:
     """A matcher that accepts any valid UUID4 string."""
@@ -906,3 +912,229 @@ class TestUser:
         expected_response = {"detail": "Malformed Data"}
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.json() == expected_response
+
+
+class TestUserAdmin:
+    """Test cases for admin user management endpoints"""
+    
+    def test_list_users_success(self, request):
+        """Test successful listing of users with pagination"""
+        user_store = request.instance.user_store
+        client = request.instance.client
+        app = request.instance.app
+        
+        # Create test admin user
+        admin_user = User(
+            id=uuid.uuid4(),
+            email="goricoaico+admin@gmail.com",
+            password=get_password_hash("AdminPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+        )
+        user_store.put(str(admin_user.id), admin_user.model_dump())
+        
+        # Create test regular users
+        test_users = []
+        for i in range(3):
+            user = User(
+                id=uuid.uuid4(),
+                email=f"goricoaico+{i}@gmail.com",
+                password=get_password_hash(f"UserPass{i}123!"),
+                disabled=False,
+                created_at=datetime.now(timezone.utc),
+                is_verified=True,
+            )
+            user_store.put(str(user.id), user.model_dump())
+            test_users.append(user)
+            
+        # Get admin token
+        admin_token = create_access_token(data={"sub": admin_user.email})
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        # Test listing users
+        response = client.get(f"{settings.API_V1_STR}/user/users", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) == 3  # 3 test users
+        
+        # Verify user data structure
+        user = data[0]
+        assert "id" in user
+        assert "email" in user
+        assert "disabled" in user
+        assert "is_verified" in user
+        assert "created_at" in user
+        assert "password" not in user  # Password should not be exposed
+        
+        # Test pagination
+        response = client.get(f"{settings.API_V1_STR}/user/users?skip=1&limit=2", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+
+    def test_list_users_unauthorized(self, request):
+        """Test listing users without authentication"""
+        client = request.instance.client
+        
+        response = client.get(f"{settings.API_V1_STR}/user/users")
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Not authenticated"
+
+    def test_list_users_invalid_pagination(self, request):
+        """Test listing users with invalid pagination parameters"""
+        user_store = request.instance.user_store
+        client = request.instance.client
+        
+        # Create test admin user and get token
+        admin_user = User(
+            id=uuid.uuid4(),
+            email="goricoaico+admin@gmail.com",
+            password=get_password_hash("AdminPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+        )
+        user_store.put(str(admin_user.id), admin_user.model_dump())
+        admin_token = create_access_token(data={"sub": admin_user.email})
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        # Test negative skip
+        response = client.get(f"{settings.API_V1_STR}/user/users?skip=-1", headers=admin_headers)
+        assert response.status_code == 422
+        
+        # Test zero limit
+        response = client.get(f"{settings.API_V1_STR}/user/users?limit=0", headers=admin_headers)
+        assert response.status_code == 422
+        
+        # Test limit too large
+        response = client.get(f"{settings.API_V1_STR}/user/users?limit=101", headers=admin_headers)
+        assert response.status_code == 422
+
+    def test_create_user_success(self, request):
+        """Test successful user creation by admin"""
+        user_store = request.instance.user_store
+        client = request.instance.client
+        
+        # Setup admin user and get token
+        admin_user = User(
+            id=uuid.uuid4(),
+            email="goricoaico+admin@gmail.com",
+            password=get_password_hash("AdminPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+        )
+        user_store.put(str(admin_user.id), admin_user.model_dump())
+        admin_token = create_access_token(data={"sub": admin_user.email})
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        # Test creating new user
+        new_user_data = {
+            "email": "goricoaico+newuser@gmail.com",
+            "password": "NewUserPass123!"
+        }
+        response = client.post(f"{settings.API_V1_STR}/user/users", json=new_user_data, headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify response structure
+        assert "id" in data
+        assert data["email"] == new_user_data["email"]
+        assert data["is_verified"] is True  # Admin-created users are pre-verified
+        assert "password" not in data
+        
+        # Verify user was actually created
+        user = get_user_by_email(new_user_data["email"], user_store)
+        assert user is not None
+        assert user.email == new_user_data["email"]
+        assert user.is_verified is True
+
+    def test_create_user_duplicate_email(self, request):
+        """Test creating user with existing email"""
+        user_store = request.instance.user_store
+        client = request.instance.client
+        
+        # Setup admin user and get token
+        admin_user = User(
+            id=uuid.uuid4(),
+            email="goricoaico+admin@gmail.com",
+            password=get_password_hash("AdminPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+        )
+        user_store.put(str(admin_user.id), admin_user.model_dump())
+        admin_token = create_access_token(data={"sub": admin_user.email})
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        # Create a test user first
+        test_user = User(
+            id=uuid.uuid4(),
+            email="goricoaico+existing@gmail.com",
+            password=get_password_hash("TestPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+        )
+        user_store.put(str(test_user.id), test_user.model_dump())
+        
+        # Try to create user with same email
+        new_user_data = {
+            "email": test_user.email,  # Use existing email
+            "password": "NewUserPass123!"
+        }
+        response = client.post(f"{settings.API_V1_STR}/user/users", json=new_user_data, headers=admin_headers)
+        assert response.status_code == 400
+        assert "User already exists" in response.json()["detail"]
+
+    def test_create_user_invalid_data(self, request):
+        """Test creating user with invalid data"""
+        user_store = request.instance.user_store
+        client = request.instance.client
+        
+        # Setup admin user and get token
+        admin_user = User(
+            id=uuid.uuid4(),
+            email="goricoaico+admin@gmail.com",
+            password=get_password_hash("AdminPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+        )
+        user_store.put(str(admin_user.id), admin_user.model_dump())
+        admin_token = create_access_token(data={"sub": admin_user.email})
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        # Test missing required fields
+        response = client.post(f"{settings.API_V1_STR}/user/users", json={}, headers=admin_headers)
+        assert response.status_code == 422
+        
+        # Test invalid email format
+        response = client.post(
+            f"{settings.API_V1_STR}/user/users",
+            json={"email": "invalid-email", "password": "ValidPass123!"},
+            headers=admin_headers
+        )
+        assert response.status_code == 422
+        
+        # Test invalid password format
+        response = client.post(
+            f"{settings.API_V1_STR}/user/users",
+            json={"email": "goricoaico+valid@gmail.com", "password": "weak"},
+            headers=admin_headers
+        )
+        assert response.status_code == 422
+
+    def test_create_user_unauthorized(self, request):
+        """Test creating user without authentication"""
+        client = request.instance.client
+        
+        new_user_data = {
+            "email": "goricoaico+newuser@gmail.com",
+            "password": "NewUserPass123!"
+        }
+        response = client.post(f"{settings.API_V1_STR}/user/users", json=new_user_data)
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Not authenticated"

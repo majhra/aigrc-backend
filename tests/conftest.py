@@ -19,6 +19,10 @@ def setup_and_teardown(request: pytest.FixtureRequest):
     request.instance.user_store = LocalStore()  # type: ignore
     request.instance.force_equals = ForceEquals()  # type: ignore
     request.instance.valid_passwords = ["passworD1!", "newPassworD8("]  # type: ignore
+    
+    # Set up dependency override for user_store
+    from app.api import deps
+    request.instance.app.dependency_overrides[deps.get_user_store] = lambda: request.instance.user_store  # type: ignore
 
     yield
 
