@@ -4,7 +4,7 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from os.path import join
 from typing import Annotated, List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import shortuuid
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
@@ -19,7 +19,9 @@ from app.api.utils import (
     format_email,
     get_password_hash,
     get_user,
+    get_user_by_email,
     send_verification_email,
+    get_user_uuid_by_email,
 )
 from app.core.config import settings
 from app.modules.email_service import (
@@ -95,15 +97,19 @@ async def create_user(
 ):
     # Check if user already exists
     email = user_credentials.email
-    user = get_user(email, user_store)
+    user = get_user_by_email(email, user_store)
 
     if user is not None:
+        logger.error(f"Attempting to register existing user: {email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST
         )
 
+    # Generate a standard UUID4
+    user_id = uuid4()
+    
     user = User(
-        # username=user_credentials.username,
+        id=user_id,  # Use standard UUID4
         email=email,
         password=get_password_hash(user_credentials.password),
         disabled=False,
@@ -112,7 +118,7 @@ async def create_user(
     )
 
     # Save user to database
-    user_store.put(user.email, user.model_dump())
+    user_store.put(str(user.id), user.model_dump())
 
     # Generate verification email
     try:
@@ -127,7 +133,7 @@ async def create_user(
         logger.error(f"Error sending verification email: {error_message}")
 
         # Delete user record
-        user_store.pop(user.email)
+        user_store.pop(str(user.id))
 
         # Return error
         raise HTTPException(
@@ -154,7 +160,7 @@ async def verify_email(
     logger.info(f"verify_email called: {email}")
 
     # Check if user exists
-    user = get_user(email, user_store)
+    user = get_user_by_email(email, user_store)
     if user is None:
         logger.error(f"User with email {email} does not exist")
         raise HTTPException(
@@ -211,7 +217,7 @@ async def resend_verification_email(
     logger.info(f"resend_verification_email called: {email}")
 
     # Check if user exists
-    user = get_user(email, user_store)
+    user = get_user_by_email(email, user_store)
     if user is None:
         logger.error(f"User with email {email} does not exist")
         raise HTTPException(
@@ -236,7 +242,7 @@ async def password_reset_request(
     email = password_reset_request_data.email.lower()
 
     # Check if user exists
-    user = get_user(email, user_store)
+    user = get_user_by_email(email, user_store)
     if user is None:
         logger.info(f"User with email {email} does not exist")
         raise HTTPException(
@@ -319,7 +325,7 @@ async def password_reset_verify(
     password_reset_code = form_data.password_reset_code.upper()
 
     # Check if user exists
-    user = get_user(email, user_store)
+    user = get_user_by_email(email, user_store)
     if user is None:
         logger.info(f"User with email {email} does not exist")
         raise HTTPException(
@@ -490,7 +496,7 @@ async def get_user_by_id(
     """
     try:
         # Try to get user by UUID
-        user = user_store.get(str(user_id))
+        user = get_user_by_email(str(user_id), user_store)
         
         if user is None:
             logger.info(f"User not found: {user_id}")
@@ -511,7 +517,7 @@ async def get_user_by_id(
         )
 
 @router.get("/users/email/{email}", response_model=UserResponse)
-async def get_user_by_email(
+async def get_user_via_email(
     email: str,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     logger: TLogger = Depends(deps.get_logger),
@@ -522,7 +528,7 @@ async def get_user_by_email(
     """
     try:
         # Get user by email using the email index
-        user_data = user_store.get_by_email(email)
+        user_data = get_user_by_email(email, user_store)
         
         if user_data is None:
             logger.info(f"User not found: {email}")
@@ -556,14 +562,18 @@ async def create_user_admin(
     # TODO: Add admin role check
     try:
         # Check if user already exists using email index
-        existing_user = user_store.get_by_email(user_data.email)
+        existing_user = get_user_by_email(user_data.email,user_store)
         if existing_user is not None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User already exists"
             )
 
+        # Generate a standard UUID4
+        user_id = uuid4()
+        
         user = User(
+            id=user_id,  # Use standard UUID4
             email=user_data.email,
             password=get_password_hash(user_data.password),
             disabled=False,
@@ -598,7 +608,7 @@ async def update_user(
     Update a user's details (admin or self).
     """
     try:
-        user_data = user_store.get(str(user_id))
+        user_data = get_user(str(user_id), user_store)
         if user_data is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

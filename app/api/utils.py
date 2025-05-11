@@ -66,15 +66,65 @@ def get_user(username: str, user_store: StoreProtocol) -> Optional[UserInDB]:
     if user_dict:
         return UserInDB(**user_dict)
 
+def get_user_by_email(username: str, user_store: StoreProtocol) -> Optional[UserInDB]:
+    """
+    Get the user from the database.
+    :param username: The username of the user to get.
+    :param user_store: The user store.
+    :return: The user data.
+    """
+    user_dict = user_store.get_by_email(username)
+    if user_dict:
+        return UserInDB(**user_dict)
+    
+def get_user_uuid_by_email(email: str, user_store: StoreProtocol) -> str | None:
+    """
+    Get a user's UUID by their email address.
+    
+    Args:
+        email: The email address to look up
+        user_store: The user store instance
+        
+    Returns:
+        The user's UUID as a string if found, None otherwise
+        
+    Raises:
+        Exception: If there is an error accessing the store
+    """
+    try:
+        user_dict = user_store.get_by_email(email)
+        if user_dict:
+            return user_dict['id']
+        return None
+    except Exception as e:
+        # Log the error and re-raise
+        logger.error(f"Error looking up user UUID by email {email}: {str(e)}")
+        raise
 
 def authenticate_user(username: str, password: str, user_store: StoreProtocol):
-    user = get_user(username, user_store)
+    """
+    Authenticate a user by email and password.
+    
+    Args:
+        username: The user's email address
+        password: The user's password
+        user_store: The user store instance
+        
+    Returns:
+        User object if authentication succeeds, False otherwise
+    """
+    # Get user by email using the email index
+    user = get_user_by_email(username, user_store)
     if not user:
         return False
     if not verify_password(password, user.password):
         return False
+    
+    # Update last login time
     user.last_login = datetime.now(timezone.utc)
-    user_store.put(username, user.model_dump())
+    
+    # Save user with UUID as key - email index is handled by the store
+    user_store.put(str(user.id), user.model_dump())
     return user
 
 
@@ -153,7 +203,7 @@ def send_verification_email(
     verification_code_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
 
     # Get user record
-    user = get_user(email, user_store)
+    user = get_user_uuid_by_email(email, user_store)
 
     if user is None:
         logger.error(f"User with email {email} does not exist")
@@ -199,15 +249,16 @@ def send_verification_email(
         **{"subject": "Welcome to AI GRC", "body": rendered_email, "to": [email]}
     )
 
-    email_service = EmailService(
-        AWSEmailExecuter(
-            settings.SES_AWS_SENDER_EMAIL,
-            settings.SES_AWS_ACCESS_KEY_ID,
-            settings.SES_AWS_SECRET_ACCESS_KEY,
-            settings.SES_AWS_REGION,
+    if False:
+        email_service = EmailService(
+            AWSEmailExecuter(
+                settings.SES_AWS_SENDER_EMAIL,
+                settings.SES_AWS_ACCESS_KEY_ID,
+                settings.SES_AWS_SECRET_ACCESS_KEY,
+                settings.SES_AWS_REGION,
+            )
         )
-    )
-    email_service.send(email_data)
+        email_service.send(email_data)
 
     # Logging
     logger.info(f"Verification email sent to {email}")

@@ -275,15 +275,31 @@ class RedisStore(StoreProtocol):
 class LocalStore(StoreProtocol):
     def __init__(self):
         self.data: Dict[str, Any] = {}
+        self.email_index: Dict[str, str] = {}  # Maps email to UUID
 
     def put(self, key: str, value: dict) -> None:
         self.data[key] = value
+        # Update email index if email is present
+        if 'email' in value and value['email']:
+            self.email_index[value['email']] = key
 
     def get(self, key: str) -> Dict[str, str] | None:
         return self.data.get(key, None)
+
+    def get_by_email(self, email: str) -> Dict[str, str] | None:
+        # Get UUID from email index
+        uuid = self.email_index.get(email)
+        if not uuid:
+            return None
+        # Get user data using UUID
+        return self.data.get(uuid)
 
     def keys(self) -> List[str] | None:
         return list(self.data.keys())
 
     def pop(self, key: str) -> dict | None:
+        # Remove from email index if email exists
+        user_data = self.data.get(key)
+        if user_data and 'email' in user_data:
+            self.email_index.pop(user_data['email'], None)
         return self.data.pop(key, None)

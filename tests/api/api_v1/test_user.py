@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
+import uuid
+from typing import Any
 
 from fastapi import status
+from pydantic import UUID4
 
 from app.api import deps
 from app.api.utils import get_password_hash
@@ -9,7 +12,23 @@ from app.core.config import settings
 from app.schemas import User
 
 
+class UUIDMatcher:
+    """A matcher that accepts any valid UUID4 string."""
+    def __eq__(self, other: Any) -> bool:
+        if other is None:
+            return False
+        try:
+            # Try to parse as UUID4
+            uuid_obj = uuid.UUID(str(other))
+            return uuid_obj.version == 4
+        except (ValueError, AttributeError):
+            return False
+
+
 class TestUser:
+    def setup_method(self):
+        self.uuid_matcher = UUIDMatcher()
+
     @patch("app.api.api_v1.endpoints.user.send_verification_email")
     def test_signup_success(self, mock_send_verification_email, request):
         client = request.instance.client
@@ -21,16 +40,17 @@ class TestUser:
         )
 
         data = {
-            "email": "gorocoaico@gmail.com",
+            "email": "gorocoaico+test_signup_success@gmail.com",
             "password": request.instance.valid_passwords[0],
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         response = client.post(
-            f"{settings.API_V1_STR}/user/signup", data=data, headers=headers
+            f"{settings.API_V1_STR}/user/register", data=data, headers=headers
         )
 
         expected_response = {
-            "email": "gorocoaico@gmail.com",
+            'id': self.uuid_matcher,
+            "email": "gorocoaico+test_signup_success@gmail.com",
             "full_name": None,
             "password": force_equals,
             "disabled": False,
@@ -56,7 +76,8 @@ class TestUser:
 
         password_plain_text = request.instance.valid_passwords[0]
         user = {
-            "email": "gorocoaico@gmail.com",
+            "id": str(uuid.uuid4()),
+            "email": "gorocoaico+test_signup_user_already_exists@gmail.com",
             "full_name": None,
             "password": get_password_hash(password_plain_text),
             "disabled": False,
@@ -68,12 +89,12 @@ class TestUser:
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         data = {"email": user["email"], "password": password_plain_text}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         response = client.post(
-            f"{settings.API_V1_STR}/user/signup", data=data, headers=headers
+            f"{settings.API_V1_STR}/user/register", data=data, headers=headers
         )
 
         expected_response = {"detail": "Bad Request"}
@@ -97,12 +118,12 @@ class TestUser:
         mock_send_verification_email.side_effect = email_exception
 
         data = {
-            "email": "gorocoaico@gmail.com",
+            "email": "gorocoaico+test_signup_failed_to_send_verification_email@gmail.com",
             "password": request.instance.valid_passwords[0],
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         response = client.post(
-            f"{settings.API_V1_STR}/user/signup", data=data, headers=headers
+            f"{settings.API_V1_STR}/user/register", data=data, headers=headers
         )
 
         expected_response = {"detail": error_message}
@@ -119,10 +140,10 @@ class TestUser:
             lambda: user_store
         )
 
-        data = {"email": "gorocoaico@gmail.com"}
+        data = {"email": "gorocoaico+test_signup_missing_password@gmail.com"}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         response = client.post(
-            f"{settings.API_V1_STR}/user/signup", data=data, headers=headers
+            f"{settings.API_V1_STR}/user/register", data=data, headers=headers
         )
 
         expected_response = {
@@ -151,6 +172,7 @@ class TestUser:
 
         password_plain_text = request.instance.valid_passwords[0]
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": get_password_hash(password_plain_text),
@@ -161,7 +183,7 @@ class TestUser:
             "verification_code": None,
             "verification_code_expires_at": None,
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         data = {"username": user["email"], "password": password_plain_text}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -183,6 +205,7 @@ class TestUser:
 
         password_plain_text = request.instance.valid_passwords[0]
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": get_password_hash(password_plain_text),
@@ -195,7 +218,7 @@ class TestUser:
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         data = {"username": user["email"], "password": password_plain_text}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -239,6 +262,7 @@ class TestUser:
 
 
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": request.instance.valid_passwords[0],
@@ -251,7 +275,7 @@ class TestUser:
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         data = {"email": user["email"], "verification_code": user["verification_code"]}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -275,6 +299,7 @@ class TestUser:
 
 
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": request.instance.valid_passwords[0],
@@ -287,7 +312,7 @@ class TestUser:
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         data = {"email": user["email"], "verification_code": "INVALID"}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -309,6 +334,7 @@ class TestUser:
 
 
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": request.instance.valid_passwords[0],
@@ -321,7 +347,7 @@ class TestUser:
                 datetime.now() - timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         data = {"email": user["email"], "verification_code": user["verification_code"]}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -343,6 +369,7 @@ class TestUser:
 
 
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": request.instance.valid_passwords[0],
@@ -353,7 +380,7 @@ class TestUser:
             "verification_code": None,
             "verification_code_expires_at": None,
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         data = {"email": user["email"], "verification_code": "FGD69G"}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -396,6 +423,7 @@ class TestUser:
         )
 
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": request.instance.valid_passwords[0],
@@ -408,7 +436,7 @@ class TestUser:
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         data = {"email": user["email"]}
         response = client.post(
@@ -526,6 +554,7 @@ class TestUser:
         response = client.get(f"{settings.API_V1_STR}/user/me")
 
         expected_response = {
+            'id': None,  
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": request.instance.valid_passwords[0],
@@ -586,6 +615,7 @@ class TestUser:
         # Add user to store
         password_plain_text = request.instance.valid_passwords[0]
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": get_password_hash(password_plain_text),
@@ -596,7 +626,7 @@ class TestUser:
             "verification_code": None,
             "verification_code_expires_at": None,
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         # Mock current user so we are authenticated
         app.dependency_overrides[deps.get_current_user] = lambda: User(
@@ -635,6 +665,7 @@ class TestUser:
         # Add user to store
         password_plain_text = request.instance.valid_passwords[0]
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": get_password_hash(password_plain_text),
@@ -645,7 +676,7 @@ class TestUser:
             "verification_code": None,
             "verification_code_expires_at": None,
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         # Call password reset request endpoint
         data = {"email": user["email"]}
@@ -692,6 +723,7 @@ class TestUser:
         # Add user to store
         password_plain_text = request.instance.valid_passwords[0]
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": get_password_hash(password_plain_text),
@@ -702,7 +734,7 @@ class TestUser:
             "verification_code": None,
             "verification_code_expires_at": None,
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         # Call password reset request endpoint
         data = {"email": user["email"]}
@@ -725,6 +757,7 @@ class TestUser:
         # Add user to store
         password_plain_text = request.instance.valid_passwords[0]
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": get_password_hash(password_plain_text),
@@ -739,7 +772,7 @@ class TestUser:
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         # Call password reset verify endpoint
         data = {
@@ -795,6 +828,7 @@ class TestUser:
         # Add user to store
         password_plain_text = request.instance.valid_passwords[0]
         user = {
+            "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
             "password": get_password_hash(password_plain_text),
@@ -809,7 +843,7 @@ class TestUser:
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         # Call password reset verify endpoint
         data = {
@@ -839,7 +873,8 @@ class TestUser:
         password_plain_text = request.instance.valid_passwords[0]
         password_reset_code = "FGD69G"
         user = {
-            "email": "gorocoaico@gmail.com",
+            "id": str(uuid.uuid4()),
+            "email": "gorocoaico+test_password_reset_verify_code_expired@gmail.com",
             "full_name": None,
             "password": get_password_hash(password_plain_text),
             "disabled": False,
@@ -853,7 +888,7 @@ class TestUser:
                 datetime.now() - timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
         }
-        user_store.put(user["email"], user)
+        user_store.put(user["id"], user)
 
         # Call password reset verify endpoint
         data = {

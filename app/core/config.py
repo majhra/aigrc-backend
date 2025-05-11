@@ -34,7 +34,7 @@ class Settings(BaseSettings):
         case_sensitive=True,
     )
 
-    PROJECT_NAME: str = "Quant Insights"
+    PROJECT_NAME: str = "AI GRC"
     API_V1_STR: str = "/api/v1.0"
 
     # Variables which should be set in .env file
