@@ -1,0 +1,111 @@
+from datetime import datetime
+from typing import Annotated
+
+from fastapi import Form
+from pydantic import BaseModel, EmailStr, field_validator
+from pydantic.dataclasses import dataclass
+
+from app.api import utils
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    created_at: datetime
+
+
+class RegistrationUserRepsonse(BaseModel):
+    message: str
+    data: UserResponse
+
+
+class TokenData(BaseModel):
+    email: str | None = None
+
+
+class User(BaseModel):
+    # username: str # Removed - now uses email
+    email: str | None = None
+    full_name: str | None = None
+    password: str | None = None
+    disabled: bool | None = None
+    created_at: datetime | None = None
+    last_login: datetime | None = None
+    is_verified: bool | None = None
+    verification_code: str | None = None
+    verification_code_expires_at: datetime | None = None
+    password_reset_code: str | None = None
+    password_reset_code_expires_at: datetime | None = None
+
+
+class UserInDB(User):
+    password: str
+
+
+class EmailVerification(BaseModel):
+    email: str
+    verification_code: str
+
+
+class SupportRequest(BaseModel):
+    message: str
+
+
+class UserUpdate(BaseModel):
+    full_name: str | None = None
+
+
+class UserPasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+@dataclass
+class UserSignup:
+    email: Annotated[EmailStr, Form()]
+    password: Annotated[str, Form()]
+
+    @field_validator("email", mode="before")
+    def lowercase_and_strip_email(cls, email, **kwargs):
+        return utils.format_email(email)
+
+    @field_validator("password")
+    def validate_password(cls, password, **kwargs):
+        return utils.validate_password(password)
+
+
+@dataclass
+class UserEmailVerification:
+    email: Annotated[EmailStr, Form()]
+    verification_code: Annotated[str, Form()]
+
+    @field_validator("email", mode="before")
+    def lowercase_and_strip_email(cls, email, **kwargs):
+        return utils.format_email(email)
+
+    @field_validator("verification_code", mode="before")
+    def validate_password_reset_code(cls, password_reset_code, **kwargs):
+        return password_reset_code.upper().strip()
+
+
+@dataclass
+class UserPasswordResetVerify:
+    email: Annotated[EmailStr, Form()]
+    new_password: Annotated[str, Form()]
+    password_reset_code: Annotated[str, Form()]
+
+    @field_validator("email", mode="before")
+    def lowercase_and_strip_email(cls, email, **kwargs):
+        return utils.format_email(email)
+
+    @field_validator("new_password")
+    def validate_password(cls, password, **kwargs):
+        return utils.validate_password(password)
+
+    @field_validator("password_reset_code", mode="before")
+    def validate_password_reset_code(cls, password_reset_code, **kwargs):
+        return password_reset_code.upper().strip()

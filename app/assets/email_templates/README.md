@@ -1,0 +1,2 @@
+# How To Create Email Templates
+Email templates are built using [MJML](https://mjml.io/), which need to be compiled into HTML and exported into the `app\assets\email_templates` directory prior to committing template changes. So, if the template changes, make sure you export the generated HTML as well!

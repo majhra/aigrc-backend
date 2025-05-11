@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title></title>
+  <style>
+    .header {
+      background-color: #216086;
+      padding: 40px 20px 40px 20px;
+      /* width: 600px; */
+      /* This needs to be in-line for some reason */
+      text-align: center;
+    }
+
+    .footer {
+      background-color: #080f30;
+      padding: 20px 40px;
+      text-align: center;
+    }
+
+    .main-content {
+      background-color: #d5dad0;
+      padding: 20px 40px;
+    }
+
+    .new-account-text {
+      font-family: "Suisse Condensed";
+      font-size: 25px;
+      font-weight: bold;
+      color: #216086;
+      text-align: center;
+    }
+
+    .text-body {
+      font-family: "Suisse Condensed";
+      font-size: 20px;
+    }
+
+    .verification-button {
+      background-color: #216086;
+      color: #ffffff;
+      font-family: "Suisse Condensed";
+      font-size: 20px;
+      /* font-weight: bold; */
+      padding: 10px 20px;
+      text-decoration: none;
+      text-align: center;
+      /* box-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25); */
+      border-radius: 40px;
+      mso-hide: all;
+    }
+  </style>
+</head>
+
+<body>
+  <table class="main-content-table" width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        <table border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td class="header">
+              <img src="{{ logo_src }}" />
+            </td>
+          </tr>
+          <tr>
+            <td class="main-content" width="600">
+              <h1 class="new-account-text">New account signup!</h1>
+              <p class="text-body">
+                Thanks for signing up to AI GRC platform! To
+                complete your email verification, please click the verification button below.
+              </p>
+              <div align="center">
+                <!--[if mso]>
+                  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ verification_url_with_params }}" style="height:45px;v-text-anchor:middle;width:150px;" arcsize="70%" strokecolor="#216086" fillcolor="#216086">
+                    <w:anchorlock/>
+                    <center style="color:#ffffff;font-family:Suisse Condensed;font-size:20px;">VERIFY NOW</center>
+                  </v:roundrect>
+                <![endif]-->
+                <a class="verification-button" href="{{ verification_url_with_params }}">VERIFY NOW</a>
+              </div>
+              <p class="text-body">
+                In the unlikely event that our next generation verification button breaks down, please visit our
+                verification page and enter your details manually.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td class="main-content">
+              <hr style="border: 1px solid #216086; width: 100%; margin: 20px 0px 20px 0px;" />
+              <table width="100%" border="0" cellspacing="0" cellpadding="5">
+                <tr>
+                  <td align="right">
+                    <p class="text-body">
+                      Verification Page:<br>
+                      Email:<br>
+                      Verification Code:<br>
+                    </p>
+                  </td>
+                  <td align="left">
+                    <p class="text-body">
+                      {{ verification_url }}<br>
+                      {{ email }}<br>
+                      {{ verification_code }}<br>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+              <hr style="border: 1px solid #216086; width: 100%; margin: 20px 0px 20px 0px;" />
+            </td>
+          </tr>
+          <tr>
+            <td class="footer" width="600">
+              <p>
+                You're receiving this email because you have signed up to our platform. Please ignore this email if you have not signed up.
+              </p>
+              <p>
+                &copy;2025 AIGRC | Sydney NSW 2000
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    
+  </table>
+</body>
+
+</html>
