@@ -203,7 +203,7 @@ def send_verification_email(
     verification_code_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
 
     # Get user record
-    user = get_user_uuid_by_email(email, user_store)
+    user = get_user_by_email(email, user_store)
 
     if user is None:
         logger.error(f"User with email {email} does not exist")

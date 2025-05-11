@@ -9,6 +9,8 @@ from pydantic import ValidationError
 from app.api.api_v1.api import api_router
 from app.api.utils import get_logger
 from app.core.config import settings
+import json
+
 
 logger = get_logger()
 

@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Protocol
 
 import msgpack
 import redis
-
+import uuid
 
 class StoreProtocol(Protocol):
     def put(self, key: str, value: dict) -> None:
@@ -82,6 +82,9 @@ class RedisStore(StoreProtocol):
             obj, bool
         ):  # bool is a subclass of int, so we need to exclude it
             return obj
+    
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
 
         return msgpack.packb(obj)
 

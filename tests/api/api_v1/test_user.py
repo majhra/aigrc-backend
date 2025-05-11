@@ -200,6 +200,7 @@ class TestUser:
         expected_response = {"access_token": force_equals, "token_type": "bearer"}
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == expected_response
+        assert False
 
     def test_login_email_not_verified(self, request):
         user_store = request.instance.user_store
