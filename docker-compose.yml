@@ -8,3 +8,8 @@ services:
     ports:
       - "80:80"
     env_file: ./.env
+
+networks:
+  default:
+    name: kafka-network
+    external: true

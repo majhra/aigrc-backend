@@ -163,15 +163,22 @@ src/
 ### Core API Endpoints (Expected from Python Backend)
 
 1. **Authentication:**
-   - POST /api/auth/login
-   - POST /api/auth/register
-   - POST /api/auth/refresh-token
+   - `POST /api/v1.0/user/login` - User login with JWT token generation
+   - `POST /api/v1.0/user/register` - New user registration
+   - `POST /api/v1.0/user/verify_email` - Email verification
+   - `POST /api/v1.0/user/resend_verification_email` - Resend verification email
+   - `POST /api/v1.0/user/password_reset/request` - Request password reset
+   - `POST /api/v1.0/user/password_reset/verify` - Verify and set new password
 
 2. **Users:**
-   - GET /api/users
-   - GET /api/users/{id}
-   - POST /api/users
-   - PUT /api/users/{id}
+   - `GET /api/v1.0/user/me` - Get current user profile
+   - `POST /api/v1.0/user/update_profile` - Update user profile
+   - `POST /api/v1.0/user/support` - Submit support request
+   - `GET /api/v1.0/user/users` - List users (incomplete, admin only, paginated)
+   - `GET /api/v1.0/user/users/{user_id}` - Get user by UUID (admin only)
+   - `GET /api/v1.0/user/users/email/{email}` - Get user by email (admin only)
+   - `POST /api/v1.0/user/users` - Create new user (admin only)
+   - `PUT /api/v1.0/user/users/{user_id}` - Update user (admin only)
 
 3. **Configuration:**
    - GET /api/configurations
