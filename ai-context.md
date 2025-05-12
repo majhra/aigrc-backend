@@ -187,9 +187,12 @@ src/
    - PUT /api/configurations/{id}
 
 4. **Prompts:**
-   - GET /api/prompts
+   - GET /api/prompts/categories
+   - GET /api/prompts/categories/{id}
+   - POST /api/prompts/categories
+   - PUT /api/prompts/categories/{id}
    - GET /api/prompts/{id}
-   - POST /api/prompts
+   - POST /api/prompts/
    - PUT /api/prompts/{id}
 
 5. **Tests:**
@@ -275,6 +278,302 @@ Two-column layout:
 - Clear visual hierarchy with consistent spacing
 - Button styles: primary, secondary, outline, text
 - Form elements should be accessible and support validation
+
+## Test Collection Model
+
+The TestCollection model represents a logical grouping of related tests for easier management, execution, and reporting.
+
+### Core Properties
+- **id**: UUID for unique identification
+- **name**: Human-readable name for the collection
+- **description**: Detailed description of the collection's purpose and scope
+- **tests**: Array of test IDs included in this collection
+
+### Organization Properties
+- **category**: Primary categorization (e.g., "SAFETY", "ACCURACY", "COMPLIANCE")
+- **subcategory**: More specific categorization (optional)
+- **priority**: Priority level (HIGH, MEDIUM, LOW)
+- **ValidatorType**: Default validator type for tests (HUMAN, AI, RULE_BASED, HYBRID)
+
+### Scheduling Information
+- **scheduleType**: When to run this collection (MANUAL, SCHEDULED, TRIGGERED)
+- **schedule**: Scheduling details (optional)
+  - **frequency**: How often to run (HOURLY, DAILY, WEEKLY, MONTHLY)
+  - **startTime**: When to start execution
+  - **timeZone**: Time zone for scheduling
+  - **daysOfWeek**: Which days to run (for WEEKLY)
+  - **dayOfMonth**: Which day to run (for MONTHLY)
+- **triggers**: Events that should trigger execution (optional)
+  - Each trigger contains:
+    - **type**: Type of trigger (API_CHANGE, MODEL_UPDATE, CODE_COMMIT)
+    - **source**: Source of the trigger
+    - **conditions**: Specific conditions for triggering
+
+### Notification Settings
+- **notificationConfig**: Configuration for execution notifications
+  - **channels**: Array of notification channels (EMAIL, SLACK, WEBHOOK)
+  - **events**: Which events trigger notifications (START, COMPLETION, FAILURE)
+  - **recipients**: Who should receive notifications
+  - **templates**: Message templates for different events (optional)
+
+### Compliance Mapping
+- **complianceFrameworks**: Array of compliance frameworks this collection addresses
+  - Each framework contains:
+    - **id**: Framework identifier
+    - **name**: Framework name
+    - **version**: Framework version
+    - **controls**: Specific controls covered by this collection
+
+### Metadata
+- **createdBy**: User ID who created the collection
+- **createdAt**: Timestamp of creation
+- **updatedAt**: Timestamp of last update
+- **tags**: Array of tags for categorization and filtering
+
+### Status Information
+- **status**: Current status (DRAFT, ACTIVE, ARCHIVED)
+- **lastRunAt**: Timestamp of most recent execution (optional)
+
+### Latest Execution Reference
+- **latestExecutionId**: Reference to the latest collection execution (optional)
+
+## Test Collection Execution Model
+
+The TestCollectionExecution model represents a specific instance of a test collection being run.
+
+### Core Properties
+- **id**: UUID for this specific collection execution
+- **collectionId**: Reference to parent collection
+
+### Execution Context
+- **executedAt**: When this execution occurred
+- **executedBy**: User who ran the collection
+- **executionEnvironment**: Details about the execution context
+  - **environmentId**: Testing environment identifier
+  - **version**: Version of the system under test
+  - **parameters**: Environment-specific parameters (optional)
+
+### Execution Summary
+- **status**: Overall execution status (PENDING, IN_PROGRESS, COMPLETED, FAILED)
+- **progress**: Execution progress (percentage complete)
+- **startTime**: When execution started
+- **endTime**: When execution completed (optional)
+- **totalTests**: Total number of tests in the collection
+- **testsCompleted**: Number of tests completed
+- **testsPassed**: Number of tests passed
+- **testsFailed**: Number of tests failed
+- **testsSkipped**: Number of tests skipped
+
+### Test Execution References
+- **testExecutions**: Array of test execution references
+  - Each reference contains:
+    - **testId**: Reference to the test
+    - **executionId**: Reference to the test execution
+    - **status**: Execution status for this specific test
+    - **order**: Order in which the test was executed
+    - **startTime**: When test execution started
+    - **endTime**: When test execution completed (optional)
+
+### Aggregated Results
+- **aggregatedResults**: Summary of results across all tests
+  - **passingRate**: Percentage of tests passed
+  - **criticalFailures**: Number of critical failures
+  - **averageResponseTime**: Average response time across all tests
+  - **totalTokenUsage**: Total tokens used across all tests
+  - **totalCost**: Total cost of the execution (optional)
+
+### Compliance Results
+- **complianceResults**: Results specific to compliance frameworks
+  - Each result contains:
+    - **frameworkId**: Reference to compliance framework
+    - **controlsCovered**: Number of controls covered
+    - **controlsPassed**: Number of controls passed
+    - **controlsFailed**: Number of controls failed
+    - **details**: Additional compliance details (optional)
+
+### Error Information
+- **error**: Error details if the execution failed (optional)
+  - **code**: Error code
+  - **message**: Error message
+  - **details**: Additional error details (optional)
+
+## Implementation Considerations
+
+### MVP Phase
+For the MVP of collections, focus on implementing:
+- Core collection properties
+- Basic organization properties
+- Collection membership (tests array)
+- Simple execution summary
+- Essential metadata and status information
+
+### Future Enhancements
+- Advanced scheduling capabilities
+- Complex dependency rules
+- Comprehensive notification system
+- Detailed compliance mapping
+- Aggregated analytics across collections
+
+### Data Management
+- Implement efficient queries for collection-based operations
+- Consider caching frequently accessed collections
+- Support batch operations for collection management
+
+### User Experience Considerations
+- Allow for easy test inclusion/exclusion from collections
+- Support test duplication across collections
+- Provide collection templates for common testing patterns
+- Enable bulk operations on collections (run, archive, duplicate)
+
+## Test Model
+
+The Test model represents a configured test case that can be executed against an AI system.
+
+### Core Properties
+- **id**: UUID for unique identification
+- **name**: Human-readable name for the test
+- **description**: Detailed description of test purpose and expectations
+- **promptTemplate**: The actual prompt text to send to the AI model (may include variable placeholders)
+
+### Testing Interface Configuration
+- **interfaceType**: Type of AI interface being tested
+  - Options: DIRECT_LLM, CHATBOT, PLUGIN_ENABLED, CUSTOM_APP
+- **connectionConfig**: Configuration details for connecting to the AI system
+  - **endpoint**: API endpoint or service URL
+  - **headers**: Any required headers for authentication (optional)
+  - **authType**: Type of authentication required (optional)
+  - **timeout**: Connection timeout settings (optional)
+
+### Additional Capabilities
+- **plugins**: Array of plugins/tools to enable during testing (optional)
+  - Each plugin contains:
+    - **id**: Plugin identifier
+    - **version**: Plugin version
+    - **parameters**: Custom configuration for this plugin
+
+- **conversationContext**: For chatbot testing (optional)
+  - **systemPrompt**: System instructions for the conversation
+  - **conversationHistory**: Previous messages to include
+  - **userRole**: What role the test should assume
+
+### Validation Configuration
+- **validationConfig**: Configuration for test validation
+  - **validatorType**: Type of validator (HUMAN, AI, RULE_BASED, HYBRID)
+  - **validationCriteria**: Array of criteria to check
+    - Each criterion contains:
+      - **id**: Unique identifier
+      - **name**: Human-readable name
+      - **description**: What's being checked
+      - **type**: Type of check (e.g., "CONTAINS", "SENTIMENT", "TOXICITY")
+      - **parameters**: Specific parameters for this check (optional)
+  - **requiredValidators**: Number of validators required (optional)
+  - **validatorGroups**: Which user groups can validate this test (optional)
+
+### Metadata
+- **createdBy**: User ID who created the test
+- **createdAt**: Timestamp of creation
+- **updatedAt**: Timestamp of last update
+- **tags**: Array of tags for categorization and filtering
+
+### Status Information
+- **status**: Current status (DRAFT, ACTIVE, ARCHIVED)
+- **lastRunAt**: Timestamp of most recent execution (optional)
+
+### Compliance Information
+- **complianceCategories**: Array of compliance areas this test covers
+- **riskLevel**: Risk assessment level (LOW, MEDIUM, HIGH)
+
+### Latest Result Reference
+- **latestExecutionId**: Reference to the latest test execution (optional)
+
+## Test Execution Model
+
+The TestExecution model represents a specific instance of a test being run.
+
+### Core Properties
+- **id**: UUID for this specific execution
+- **testId**: Reference to parent test
+
+### Execution Context
+- **executedAt**: When this execution occurred
+- **executedBy**: User who ran the test
+- **executionEnvironment**: Details about the execution context
+  - **environmentId**: Testing environment identifier
+  - **version**: Version of the system under test (optional)
+  - **parameters**: Environment-specific parameters (optional)
+
+### Input/Output Data
+- **inputVariables**: Key-value pairs of variables used in the prompt template (optional)
+- **prompt**: The actual prompt sent (after any variable substitution)
+- **response**: The raw response from the AI model
+
+### Plugin Interactions
+- **pluginInteractions**: Record of how the LLM interacted with plugins (optional)
+  - Each interaction contains:
+    - **pluginId**: Plugin identifier
+    - **timestamp**: When the interaction occurred
+    - **request**: The request sent to the plugin
+    - **response**: The response received from the plugin
+
+### Performance Metrics
+- **benchmarks**: Performance metrics for this execution
+  - **responseTime**: Time to first token (milliseconds)
+  - **totalTime**: Total completion time (milliseconds)
+  - **tokenUsage**: Breakdown of tokens used
+    - **prompt**: Tokens in the prompt
+    - **completion**: Tokens in the completion
+    - **total**: Total tokens used
+  - **cost**: Estimated cost of the execution (optional)
+
+### Validation Information
+- **validationStatus**: Current validation status (PENDING, IN_PROGRESS, VALIDATED)
+- **validations**: Array of validation events
+  - Each validation contains:
+    - **validatorId**: Who performed validation
+    - **validatorType**: Type of validator (HUMAN, AI, RULE_BASED)
+    - **timestamp**: When validation occurred
+    - **status**: Overall status (PASS, FAIL)
+    - **criteriaResults**: Results for each validation criterion
+      - Each result contains:
+        - **criterionId**: Reference to the validation criterion
+        - **result**: Boolean pass/fail
+        - **notes**: Validator comments on this criterion (optional)
+        - **confidence**: Confidence score (especially for AI validators) (optional)
+    - **notes**: Overall validator comments (optional)
+    - **confidence**: Overall confidence score (optional)
+
+### Error Information
+- **error**: Error details if the execution failed (optional)
+  - **code**: Error code
+  - **message**: Error message
+  - **details**: Additional error details (optional)
+
+## Implementation Considerations
+
+### MVP Phase
+For the MVP, focus on implementing:
+- Core test properties
+- Basic interface configuration
+- Simple validation configuration
+- Essential metadata and status information
+
+### Future Enhancements
+- Full plugin support
+- Advanced conversation context
+- Multiple validator workflows
+- Comprehensive benchmarking
+- Detailed compliance tracking
+
+### Data Storage
+- Consider using a document database for flexibility
+- Implement proper indexing for performance
+- Set up regular backups and data retention policies
+
+### Security Considerations
+- Encrypt sensitive information in the connection configuration
+- Implement proper access controls for test data
+- Audit all access to test results
+
 
 ## Implementation Priorities for Frontend MVP
 

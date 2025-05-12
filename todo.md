@@ -6,3 +6,4 @@
 [ ] - User listing endpoint currently uses test data (needs to be connected to actual storage)
 [ ] - Email sender configuration needs to be reviewed
 [ ] - Authorization checks needed for user operations (admin or self)
+[ ] - History of tasks needs to be implemented
