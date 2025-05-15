@@ -33,7 +33,7 @@ class TestParams(BaseModel):
 # Request/Response Models
 class ConnectionConfig(BaseModel):
     endpoint: str
-    authType: str = Field(..., pattern="^(NONE|API_KEY|BEARER_TOKEN)$")
+    auth_type: str = Field(..., pattern="^(NONE|API_KEY|BEARER_TOKEN)$")
     timeout: Optional[int] = None
 
 class ValidationCriterion(BaseModel):
@@ -44,32 +44,32 @@ class ValidationCriterion(BaseModel):
     parameters: dict = {}
 
 class ValidationConfig(BaseModel):
-    validatorType: str = Field(..., pattern="^(HUMAN|AI|RULE_BASED|HYBRID)$")
-    validationCriteria: List[ValidationCriterion]
+    validator_type: str = Field(..., pattern="^(HUMAN|AI|RULE_BASED|HYBRID)$")
+    validation_criteria: List[ValidationCriterion]
 class TestCreate(BaseModel):
     name: str
     description: str
-    promptTemplate: str
-    interfaceType: str = Field(..., pattern="^(DIRECT_LLM|CHATBOT|PLUGIN_ENABLED|CUSTOM_APP)$")
-    connectionConfig: ConnectionConfig
-    validationConfig: ValidationConfig
+    prompt_template: str
+    interface_type: str = Field(..., pattern="^(DIRECT_LLM|CHATBOT|PLUGIN_ENABLED|CUSTOM_APP)$")
+    connection_config: ConnectionConfig
+    validation_config: ValidationConfig
     tags: List[str] = []
-    riskLevel: str = Field(..., pattern="^(LOW|MEDIUM|HIGH)$")
+    risk_level: str = Field(..., pattern="^(LOW|MEDIUM|HIGH)$")
     status: str = Field(..., pattern="^(DRAFT|ACTIVE|ARCHIVED)$")
 
 class TestUpdate(TestCreate):
     pass
 
-class Test(TestCreate):
+class TestSchema(TestCreate):
     id: UUID
-    createdBy: UUID
-    createdAt: str
-    updatedAt: str
-    lastRunAt: Optional[str] = None
-    latestExecutionId: Optional[UUID] = None
+    created_by: UUID
+    created_at: str
+    updated_at: str
+    lastRun_at: Optional[str] = None
+    latest_execution_id: Optional[UUID] = None
 
 class TestList(BaseModel):
-    items: List[Test]
+    items: List[TestSchema]
     total: int
     page: int
     limit: int

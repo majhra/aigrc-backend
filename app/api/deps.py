@@ -8,6 +8,7 @@ from starlette.status import HTTP_403_FORBIDDEN
 from app.api.utils import get_logger, get_user_by_email
 from app.core.config import settings
 from app.modules.store_interface import RedisStore, StoreProtocol
+from app.modules.test_store import TestStore
 from app.modules.tlogger import TLogger
 from app.schemas import TokenData, User
 
@@ -24,6 +25,13 @@ def get_user_store(logger: TLogger = Depends(get_logger)) -> StoreProtocol:
         logger, "user", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
     )
 
+def get_test_store(logger: TLogger = Depends(get_logger)) -> StoreProtocol:
+    """
+    Get the redis store for tests.
+    """
+    return TestStore(RedisStore(
+        logger, "tests", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
+    ))
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],

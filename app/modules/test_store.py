@@ -3,17 +3,17 @@ from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
 from app.modules.store_interface import LocalStore, StoreProtocol
-from app.schemas import Test, TestCreate, User
+from app.schemas import TestSchema, TestCreate, User
 
 class TestStore:
     def __init__(self, store: StoreProtocol = None):
         self._store = store or LocalStore()
 
-    def get(self, test_id: str) -> Optional[Test]:
+    def get(self, test_id: str) -> Optional[TestSchema]:
         data = self._store.get(test_id)
         if not data:
             return None
-        return Test(**data)
+        return TestSchema(**data)
 
     def list(
         self,
@@ -22,7 +22,7 @@ class TestStore:
         status: Optional[str] = None,
         risk_level: Optional[str] = None,
         search: Optional[str] = None,
-    ) -> tuple[List[Test], int]:
+    ) -> tuple[List[TestSchema], int]:
         # Get all keys
         keys = self._store.keys()
         if not keys:
@@ -54,11 +54,11 @@ class TestStore:
 
         return paginated_tests, total
 
-    def create(self, test: TestCreate, user: User) -> Test:
+    def create(self, test: TestCreate, user: User) -> TestSchema:
         now = datetime.now(timezone.utc).isoformat()
         test_id = str(uuid4())
         
-        new_test = Test(
+        new_test = TestSchema(
             id=test_id,
             created_by=user.id,
             created_at=now,
@@ -69,15 +69,15 @@ class TestStore:
         self._store.put(test_id, new_test.model_dump())
         return new_test
 
-    def update(self, test_id: str, test: TestCreate) -> Optional[Test]:
+    def update(self, test_id: str, test: TestCreate) -> Optional[TestSchema]:
         existing_data = self._store.get(test_id)
         if not existing_data:
             return None
             
-        existing_test = Test(**existing_data)
+        existing_test = TestSchema(**existing_data)
         now = datetime.now(timezone.utc).isoformat()
         
-        updated_test = Test(
+        updated_test = TestSchema(
             id=test_id,
             created_by=existing_test.created_by,
             created_at=existing_test.created_at,

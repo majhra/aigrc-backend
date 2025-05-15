@@ -195,16 +195,16 @@ src/
        {
          "name": "string",
          "description": "string",
-         "promptTemplate": "string",
-         "interfaceType": "DIRECT_LLM" | "CHATBOT" | "PLUGIN_ENABLED" | "CUSTOM_APP",
-         "connectionConfig": {
+         "prompt_template": "string",
+         "interface_type": "DIRECT_LLM" | "CHATBOT" | "PLUGIN_ENABLED" | "CUSTOM_APP",
+         "connection_config": {
            "endpoint": "string",
-           "authType": "NONE" | "API_KEY" | "BEARER_TOKEN",
+           "auth_type": "NONE" | "API_KEY" | "BEARER_TOKEN",
            "timeout": number
          },
-         "validationConfig": {
-           "validatorType": "HUMAN" | "AI" | "RULE_BASED" | "HYBRID",
-           "validationCriteria": [
+         "validation_config": {
+           "validator_type": "HUMAN" | "AI" | "RULE_BASED" | "HYBRID",
+           "validation_criteria": [
              {
                "id": "string",
                "name": "string",
@@ -215,7 +215,7 @@ src/
            ]
          },
          "tags": ["string"],
-         "riskLevel": "LOW" | "MEDIUM" | "HIGH",
+         "risk_level": "LOW" | "MEDIUM" | "HIGH",
          "status": "DRAFT" | "ACTIVE" | "ARCHIVED"
        }
        ```
@@ -235,7 +235,7 @@ src/
      - Request Body:
        ```json
        {
-         "inputVariables": {
+         "input_variables": {
            "key": "value"
          }
        }
@@ -244,12 +244,12 @@ src/
      - Request Body:
        ```json
        {
-         "validatorId": "string",
-         "validatorType": "HUMAN" | "AI" | "RULE_BASED",
+         "validator_id": "string",
+         "validator_type": "HUMAN" | "AI" | "RULE_BASED",
          "status": "PASS" | "FAIL",
-         "criteriaResults": [
+         "criteria_results": [
            {
-             "criterionId": "string",
+             "criterion_id": "string",
              "result": boolean,
              "notes": "string"
            }
@@ -264,11 +264,11 @@ src/
      - Response:
        ```json
        {
-         "totalExecutions": number,
-         "passRate": number,
-         "averageResponseTime": number,
-         "lastExecutionDate": "string",
-         "validationStatus": {
+         "total_executions": number,
+         "pass_rate": number,
+         "average_responseTime": number,
+         "last_execution_date": "string",
+         "validation_status": {
            "PASS": number,
            "FAIL": number,
            "PENDING": number
@@ -287,13 +287,13 @@ src/
              "value": number
            }
          ],
-         "responseTime": [
+         "response_time": [
            {
              "date": "string",
              "value": number
            }
          ],
-         "executionCount": [
+         "execution_count": [
            {
              "date": "string",
              "value": number

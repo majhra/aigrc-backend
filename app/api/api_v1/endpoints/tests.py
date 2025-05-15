@@ -6,19 +6,16 @@ from pydantic import BaseModel
 
 from app.api import deps
 from app.core.config import settings
-from app.modules.store_interface import StoreProtocol
-from app.schemas import Test, TestCreate, TestList, User
+from app.modules.store_interface import StoreProtocol, RedisStore
+from app.schemas import TestSchema, TestCreate, TestList, User
 from app.modules.test_store import TestStore
 
 router = APIRouter()
 
-def get_test_store() -> StoreProtocol:
-    return TestStore()
-
 @router.get("", response_model=TestList)
 async def list_tests(
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(get_test_store),
+    test_store: StoreProtocol = Depends(deps.get_test_store),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     status: Optional[str] = Query(None, pattern="^(DRAFT|ACTIVE|ARCHIVED)$"),
@@ -44,16 +41,17 @@ async def list_tests(
         limit=limit
     )
 
-@router.get("/{test_id}", response_model=Test)
+@router.get("/{test_id}", response_model=TestSchema)
 async def get_test(
     test_id: UUID,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(get_test_store),
+    test_store: StoreProtocol = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),
-) -> Test:
+) -> TestSchema:
     """
     Get test details by ID.
     """
+    logger.info(f"Getting test with ID: {test_id}")
     test = test_store.get(str(test_id))
     if not test:
         raise HTTPException(
@@ -62,26 +60,26 @@ async def get_test(
         )
     return test
 
-@router.post("", response_model=Test, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=TestSchema, status_code=status.HTTP_201_CREATED)
 async def create_test(
     test: TestCreate,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(get_test_store),
+    test_store: StoreProtocol = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),
-) -> Test:
+) -> TestSchema:
     """
     Create a new test.
     """
     return test_store.create(test, current_user)
 
-@router.put("/{test_id}", response_model=Test)
+@router.put("/{test_id}", response_model=TestSchema)
 async def update_test(
     test_id: UUID,
     test: TestCreate,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(get_test_store),
+    test_store: StoreProtocol = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),
-) -> Test:
+) -> TestSchema:
     """
     Update an existing test.
     """
@@ -97,7 +95,7 @@ async def update_test(
 async def delete_test(
     test_id: UUID,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(get_test_store),
+    test_store: StoreProtocol = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> None:
     """
