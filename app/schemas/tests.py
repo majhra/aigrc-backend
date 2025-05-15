@@ -46,7 +46,7 @@ class ValidationCriterion(BaseModel):
 class ValidationConfig(BaseModel):
     validator_type: str = Field(..., pattern="^(HUMAN|AI|RULE_BASED|HYBRID)$")
     validation_criteria: List[ValidationCriterion]
-class TestCreate(BaseModel):
+class MyTestCreate(BaseModel):
     name: str
     description: str
     prompt_template: str
@@ -57,10 +57,10 @@ class TestCreate(BaseModel):
     risk_level: str = Field(..., pattern="^(LOW|MEDIUM|HIGH)$")
     status: str = Field(..., pattern="^(DRAFT|ACTIVE|ARCHIVED)$")
 
-class TestUpdate(TestCreate):
+class TestUpdate(MyTestCreate):
     pass
 
-class TestSchema(TestCreate):
+class TestSchema(MyTestCreate):
     id: UUID
     created_by: UUID
     created_at: str

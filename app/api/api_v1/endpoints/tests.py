@@ -7,8 +7,8 @@ from pydantic import BaseModel
 from app.api import deps
 from app.core.config import settings
 from app.modules.store_interface import StoreProtocol, RedisStore
-from app.schemas import TestSchema, TestCreate, TestList, User
-from app.modules.test_store import TestStore
+from app.schemas import TestSchema, MyTestCreate, TestList, User
+from app.modules.tests_store import MyTestStore
 
 router = APIRouter()
 
@@ -62,7 +62,7 @@ async def get_test(
 
 @router.post("", response_model=TestSchema, status_code=status.HTTP_201_CREATED)
 async def create_test(
-    test: TestCreate,
+    test: MyTestCreate,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     test_store: StoreProtocol = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),
@@ -75,7 +75,7 @@ async def create_test(
 @router.put("/{test_id}", response_model=TestSchema)
 async def update_test(
     test_id: UUID,
-    test: TestCreate,
+    test: MyTestCreate,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     test_store: StoreProtocol = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),

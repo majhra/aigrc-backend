@@ -3,9 +3,9 @@ from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
 from app.modules.store_interface import LocalStore, StoreProtocol
-from app.schemas import TestSchema, TestCreate, User
+from app.schemas import TestSchema, MyTestCreate, User
 
-class TestStore:
+class MyTestStore:
     def __init__(self, store: StoreProtocol = None):
         self._store = store or LocalStore()
 
@@ -54,7 +54,7 @@ class TestStore:
 
         return paginated_tests, total
 
-    def create(self, test: TestCreate, user: User) -> TestSchema:
+    def create(self, test: MyTestCreate, user: User) -> TestSchema:
         now = datetime.now(timezone.utc).isoformat()
         test_id = str(uuid4())
         
@@ -69,7 +69,7 @@ class TestStore:
         self._store.put(test_id, new_test.model_dump())
         return new_test
 
-    def update(self, test_id: str, test: TestCreate) -> Optional[TestSchema]:
+    def update(self, test_id: str, test: MyTestCreate) -> Optional[TestSchema]:
         existing_data = self._store.get(test_id)
         if not existing_data:
             return None

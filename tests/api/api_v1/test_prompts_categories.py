@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.api import deps
 from app.core.config import settings
-from app.schemas import TestCategory, User
+from app.schemas import User
 
 class TestPromptsCategories:
     # Test data

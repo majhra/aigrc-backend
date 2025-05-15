@@ -8,7 +8,7 @@ from starlette.status import HTTP_403_FORBIDDEN
 from app.api.utils import get_logger, get_user_by_email
 from app.core.config import settings
 from app.modules.store_interface import RedisStore, StoreProtocol
-from app.modules.test_store import TestStore
+from app.modules.tests_store import MyTestStore
 from app.modules.tlogger import TLogger
 from app.schemas import TokenData, User
 
@@ -29,7 +29,7 @@ def get_test_store(logger: TLogger = Depends(get_logger)) -> StoreProtocol:
     """
     Get the redis store for tests.
     """
-    return TestStore(RedisStore(
+    return MyTestStore(RedisStore(
         logger, "tests", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
     ))
 

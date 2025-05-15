@@ -6,12 +6,11 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.test_store import TestStore
-from app.schemas import TestSchema, TestCreate, User
+from app.modules.tests_store import MyTestStore
+from app.schemas import MyTestCreate, User
 
 from app.api import deps
 from app.core.config import settings
-from app.api.deps import get_test_store 
 
 
 class TestTests:
@@ -23,7 +22,7 @@ class TestTests:
         is_superuser=False
     )
 
-    TEST_DATA = TestCreate(
+    TEST_DATA = MyTestCreate(
         name="Test AI Response",
         description="Test the AI's response to a simple prompt",
         prompt_template="What is 2+2?",
@@ -53,12 +52,12 @@ class TestTests:
     def setup_method(self, method):
         """Setup test environment before each test"""
         self.client = TestClient(app)
-        self.test_store = TestStore()
+        self.test_store = MyTestStore()
         #self.test_store.clear()  # Clear any existing tests
 
         # Override both the current user dependency and the test store dependency
         self.client.app.dependency_overrides[deps.get_current_active_user] = lambda: self.TEST_USER
-        self.client.app.dependency_overrides[get_test_store] = lambda: self.test_store
+        self.client.app.dependency_overrides[deps.get_test_store] = lambda: self.test_store
 
     def teardown_method(self, method):
         """Clean up after each test"""
