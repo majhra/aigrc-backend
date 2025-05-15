@@ -214,7 +214,7 @@ def send_verification_email(
     user.verification_code_expires_at = verification_code_expires_at
 
     # Save user record
-    user_store.put(email, user.model_dump())
+    user_store.put(str(user.id), user.model_dump())
 
     # Load email HTML template
     verification_url_with_params = (

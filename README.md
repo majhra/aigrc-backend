@@ -118,3 +118,17 @@ This will launch a Redis server and will be automatically deleted after the cont
 - Implement rate limiting for API endpoints
 - Add API versioning strategy
 - Enhance test coverage
+
+
+### Setup first user example:
+
+The following commands are to register and verify a new user. Change the --data-raw to match email, password and verification code.
+
+Register:
+curl 'http://localhost/api/v1.0/user/register' -X POST -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0' -H 'Accept: application/json' -H 'Accept-Language: en-US,en;q=0.5' -H 'Accept-Encoding: gzip, deflate, br, zstd' -H 'Referer: http://localhost:5173/login' -H 'Origin: http://localhost:5173' -H 'Connection: keep-alive' -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: no-cors' -H 'Sec-Fetch-Site: same-origin' -H 'DNT: 1' -H 'Sec-GPC: 1' -H 'Content-Type: application/x-www-form-urlencoded' -H 'Priority: u=0' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' --data-raw 'email=email@gmail.com&password=Pass1word!'
+
+Verify:
+curl 'http://localhost/api/v1.0/user/verify_email' -X POST -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0' -H 'Accept: application/json' -H 'Accept-Language: en-US,en;q=0.5' -H 'Accept-Encoding: gzip, deflate, br, zstd' -H 'Referer: http://localhost:5173/login' -H 'Origin: http://localhost:5173' -H 'Connection: keep-alive' -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: no-cors' -H 'Sec-Fetch-Site: same-origin' -H 'DNT: 1' -H 'Sec-GPC: 1' -H 'Content-Type: application/x-www-form-urlencoded' -H 'Priority: u=0' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' --data-raw 'email=email@gmail.com&password=Pass1word!&verification_code=ERNJCP'
+
+login:
+curl 'http://localhost/api/v1.0/user/login' -X POST -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0' -H 'Accept: application/json' -H 'Accept-Language: en-US,en;q=0.5' -H 'Accept-Encoding: gzip, deflate, br, zstd' -H 'Content-Type: application/x-www-form-urlencoded' -H 'Origin: http://localhost:5173' -H 'Connection: keep-alive' -H 'Referer: http://localhost:5173/login' -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: cors' -H 'Sec-Fetch-Site: same-origin' -H 'DNT: 1' -H 'Sec-GPC: 1' -H 'Priority: u=0' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' --data-raw 'username=email%40gmail.com&password=Pass1word%21'

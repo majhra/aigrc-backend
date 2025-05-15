@@ -108,17 +108,13 @@ class TestStoreInterface(unittest.TestCase):
         ]  # + [i for i in range(1, len(self.mock_user_data) + 1)]
 
         # Iterate over the mock data and assert that the mock redis was called with the correct arguments
-        i = 0
         for user_data in self.mock_user_data:
-            # Increment the counter
-            i += 1
-
             # Call the method under test
             store.put(user_data["unpacked"]["key"], user_data["unpacked"]["value"])
 
             # Assert that the mock redis was called with the correct arguments
             mock_redis_instance.hmset.assert_called_with(
-                f"{prefix}:{i}", user_data["packed"]["value"]
+                f"{prefix}:{user_data['packed']['value']['email']}", user_data["packed"]["value"]
             )
 
         # Assert that duplicate keys cannot be added
@@ -145,16 +141,13 @@ class TestStoreInterface(unittest.TestCase):
         ]
 
         # Iterate over the mock data and assert that the mock redis was called with the correct arguments
-        i = 0
-        for user_data in self.mock_user_data:
-            # Increment the counter
-            i += 1
 
+        for user_data in self.mock_user_data:
             # Call the method under test
             result = store.get(user_data["unpacked"]["key"])
 
             # Assert that the mock redis was called with the correct arguments
-            mock_redis_instance.hgetall.assert_called_with(f"{prefix}:{i}")
+            mock_redis_instance.hgetall.assert_called_with(f"{prefix}:{user_data['packed']['value']['email']}")
 
             # Assert that the result is correct
             self.assertEqual(result, user_data["unpacked"]["value"])
@@ -205,17 +198,13 @@ class TestStoreInterface(unittest.TestCase):
         ] + [None]
 
         # Iterate over the mock data and assert that the mock redis was called with the correct arguments
-        i = 0
         for user_data in self.mock_user_data:
-            # Increment the counter
-            i += 1
-
             # Call the method under test
             result = store.pop(user_data["unpacked"]["key"])
 
             # Assert that the mock redis was called with the correct arguments
-            mock_redis_instance.hgetall.assert_called_with(f"{prefix}:{i}")
-            mock_redis_instance.delete.assert_called_with(f"{prefix}:{i}")
+            mock_redis_instance.hgetall.assert_called_with(f"{prefix}:{user_data['packed']['value']['email']}")
+            mock_redis_instance.delete.assert_called_with(f"{prefix}:{user_data['packed']['value']['email']}")
             mock_redis_instance.zrem.assert_called_with(
                 store.redis_set_name, user_data["unpacked"]["key"]
             )

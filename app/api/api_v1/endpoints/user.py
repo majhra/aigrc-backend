@@ -183,8 +183,14 @@ async def verify_email(
         )
 
     # Check if verification code has expired
-    if user.verification_code_expires_at < datetime.now(timezone.utc):
-        logger.error(f"Verification code has expired for user with email {email}")
+    try:
+        if user.verification_code_expires_at < datetime.now(timezone.utc):
+            logger.error(f"Verification code has expired for user with email {email}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Data"
+            )
+    except Exception as e:
+        logger.error(f"Error checking verification code expiration: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Data"
         )
@@ -195,7 +201,7 @@ async def verify_email(
     user.verification_code_expires_at = None
 
     # Save user record
-    user_store.put(email, user.model_dump())
+    user_store.put(str(user.id), user.model_dump())
 
     # Return a authentication token
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -263,7 +269,7 @@ async def password_reset_request(
     )
 
     # Save user record
-    user_store.put(email, user.model_dump())
+    user_store.put(str(user.id), user.model_dump())
 
     # Generate URL with parameters
     password_reset_url_with_params = (
@@ -352,7 +358,7 @@ async def password_reset_verify(
     user.password_reset_code_expires_at = None
 
     # Save user record
-    user_store.put(email, user.model_dump())
+    user_store.put(str(user.id), user.model_dump())
 
     # Return an authentication token
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -377,7 +383,7 @@ async def update_profile(
             setattr(current_user, attr, value)
 
     # Save user record
-    user_store.put(current_user.email, current_user.model_dump())
+    user_store.put(str(current_user.id), current_user.model_dump())
 
     return JSONResponse(content={"message": "Profile updated"})
 
