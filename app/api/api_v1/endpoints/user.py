@@ -107,7 +107,7 @@ async def create_user(
 
     # Generate a standard UUID4
     user_id = uuid4()
-    
+
     user = User(
         id=user_id,  # Use standard UUID4
         email=email,

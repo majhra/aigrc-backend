@@ -180,13 +180,135 @@ src/
    - `POST /api/v1.0/user/users` - Create new user (admin only)
    - `PUT /api/v1.0/user/users/{user_id}` - Update user (admin only)
 
-3. **Configuration:**
+3. **Tests:**
+   - `GET /api/v1.0/tests` - List all tests (paginated)
+     - Query Parameters:
+       - `page`: Page number (default: 1)
+       - `limit`: Items per page (default: 10)
+       - `status`: Filter by status (DRAFT, ACTIVE, ARCHIVED)
+       - `riskLevel`: Filter by risk level (LOW, MEDIUM, HIGH)
+       - `search`: Search in name, description, or tags
+   - `GET /api/v1.0/tests/{test_id}` - Get test details
+   - `POST /api/v1.0/tests` - Create new test
+     - Request Body:
+       ```json
+       {
+         "name": "string",
+         "description": "string",
+         "promptTemplate": "string",
+         "interfaceType": "DIRECT_LLM" | "CHATBOT" | "PLUGIN_ENABLED" | "CUSTOM_APP",
+         "connectionConfig": {
+           "endpoint": "string",
+           "authType": "NONE" | "API_KEY" | "BEARER_TOKEN",
+           "timeout": number
+         },
+         "validationConfig": {
+           "validatorType": "HUMAN" | "AI" | "RULE_BASED" | "HYBRID",
+           "validationCriteria": [
+             {
+               "id": "string",
+               "name": "string",
+               "description": "string",
+               "type": "string",
+               "parameters": {}
+             }
+           ]
+         },
+         "tags": ["string"],
+         "riskLevel": "LOW" | "MEDIUM" | "HIGH",
+         "status": "DRAFT" | "ACTIVE" | "ARCHIVED"
+       }
+       ```
+   - `PUT /api/v1.0/tests/{test_id}` - Update test
+     - Request Body: Same as POST
+   - `DELETE /api/v1.0/tests/{test_id}` - Delete test
+
+4. **Test Executions:**
+   - `GET /api/v1.0/tests/{test_id}/executions` - List test executions
+     - Query Parameters:
+       - `page`: Page number (default: 1)
+       - `limit`: Items per page (default: 10)
+       - `status`: Filter by validation status (PENDING, VALIDATED)
+       - `result`: Filter by validation result (PASS, FAIL)
+   - `GET /api/v1.0/tests/{test_id}/executions/{execution_id}` - Get execution details
+   - `POST /api/v1.0/tests/{test_id}/execute` - Execute a test
+     - Request Body:
+       ```json
+       {
+         "inputVariables": {
+           "key": "value"
+         }
+       }
+       ```
+   - `POST /api/v1.0/tests/{test_id}/executions/{execution_id}/validate` - Submit validation
+     - Request Body:
+       ```json
+       {
+         "validatorId": "string",
+         "validatorType": "HUMAN" | "AI" | "RULE_BASED",
+         "status": "PASS" | "FAIL",
+         "criteriaResults": [
+           {
+             "criterionId": "string",
+             "result": boolean,
+             "notes": "string"
+           }
+         ],
+         "notes": "string",
+         "confidence": number
+       }
+       ```
+
+5. **Test Results:**
+   - `GET /api/v1.0/tests/{test_id}/results/summary` - Get test results summary
+     - Response:
+       ```json
+       {
+         "totalExecutions": number,
+         "passRate": number,
+         "averageResponseTime": number,
+         "lastExecutionDate": "string",
+         "validationStatus": {
+           "PASS": number,
+           "FAIL": number,
+           "PENDING": number
+         }
+       }
+       ```
+   - `GET /api/v1.0/tests/{test_id}/results/trends` - Get test performance trends
+     - Query Parameters:
+       - `period`: Time period (DAY, WEEK, MONTH)
+     - Response:
+       ```json
+       {
+         "passRate": [
+           {
+             "date": "string",
+             "value": number
+           }
+         ],
+         "responseTime": [
+           {
+             "date": "string",
+             "value": number
+           }
+         ],
+         "executionCount": [
+           {
+             "date": "string",
+             "value": number
+           }
+         ]
+       }
+       ```
+
+6. **Configuration:**
    - GET /api/configurations
    - GET /api/configurations/{id}
    - POST /api/configurations
    - PUT /api/configurations/{id}
 
-4. **Prompts:**
+7. **Prompts:**
    - GET /api/prompts/categories
    - GET /api/prompts/categories/{id}
    - POST /api/prompts/categories
@@ -195,18 +317,12 @@ src/
    - POST /api/prompts/
    - PUT /api/prompts/{id}
 
-5. **Tests:**
-   - GET /api/tests
-   - GET /api/tests/{id}
-   - POST /api/tests
-   - PUT /api/tests/{id}
-
-6. **Validations:**
+8. **Validations:**
    - GET /api/validations
    - POST /api/validations
    - PUT /api/validations/{id}
 
-7. **Reports:**
+9. **Reports:**
    - GET /api/reports/summary
    - GET /api/reports/validation-status
    - GET /api/reports/compliance

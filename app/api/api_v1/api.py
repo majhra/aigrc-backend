@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.api_v1.endpoints import feature_flags, prompts, user
+from app.api.api_v1.endpoints import feature_flags, prompts, tests,user
 
 api_router = APIRouter()
 
@@ -11,3 +11,5 @@ api_router.include_router(
 api_router.include_router(
     prompts.router, prefix="/prompts", tags=["prompts"]
 )
+api_router.include_router(tests.router, prefix="/tests", tags=["tests"])
+
