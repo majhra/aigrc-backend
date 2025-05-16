@@ -41,6 +41,23 @@ async def log_requests(request: Request, call_next):
 
     process_time = (time.time() - start_time) * 1000
     formatted_process_time = "{0:.2f}".format(process_time)
+    if response.status_code >= 400:
+        # Capture the response body
+        response_body = b""
+        async for chunk in response.body_iterator:
+            response_body += chunk
+        
+        # Log the response body
+        logger.error(f"rid={idem} error response: {response_body.decode('utf-8', errors='ignore')}")
+        
+        # Recreation of response is needed since body_iterator is consumed
+        from fastapi.responses import Response as FastAPIResponse
+        response = FastAPIResponse(
+            content=response_body,
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            media_type=response.media_type
+        )
     logger.info(
         f"rid={idem} completed_in={formatted_process_time}ms status_code={response.status_code}"
     )

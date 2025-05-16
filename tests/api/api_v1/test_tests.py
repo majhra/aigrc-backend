@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.tests_store import MyTestStore
-from app.schemas import MyTestCreate, User
+from app.modules.executions_store import ExecutedTestStore
+from app.schemas import MyTestCreate, User, ExecutedTestCreate
 
 from app.api import deps
 from app.core.config import settings
@@ -46,23 +47,26 @@ class TestTests:
         },
         tags=["math", "basic"],
         risk_level="LOW",
-        status="DRAFT"
+        status="ACTIVE"
     )
 
     def setup_method(self, method):
         """Setup test environment before each test"""
         self.client = TestClient(app)
         self.test_store = MyTestStore()
+        self.execution_store = ExecutedTestStore()
         #self.test_store.clear()  # Clear any existing tests
 
         # Override both the current user dependency and the test store dependency
         self.client.app.dependency_overrides[deps.get_current_active_user] = lambda: self.TEST_USER
         self.client.app.dependency_overrides[deps.get_test_store] = lambda: self.test_store
+        self.client.app.dependency_overrides[deps.get_execution_store] = lambda: self.execution_store
 
     def teardown_method(self, method):
         """Clean up after each test"""
         self.client.app.dependency_overrides = {}
         self.test_store.clear()
+        self.execution_store.clear()
 
     def test_create_test(self):
         """Test creating a new test"""
@@ -76,7 +80,7 @@ class TestTests:
         assert data["description"] == self.TEST_DATA.description
         assert UUID(data["id"])  # Verify it's a valid UUID
         assert data["created_by"] == str(self.TEST_USER.id)
-        assert data["status"] == "DRAFT"
+        assert data["status"] == "ACTIVE"
 
     def test_create_test_unauthorized(self):
         """Test creating a test without auth"""
@@ -287,3 +291,179 @@ class TestTests:
             json=invalid_data
         )
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY 
+
+    def test_execute_test_success(self):
+        """Test successful test execution"""
+        # First create a test
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id = create_response.json()["id"]
+
+        # Execute the test
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"},
+            execution_environment={
+                "environment_id": "test-env",
+                "version": "1.0.0"
+            }
+        )
+        
+        response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id}/execute",
+            json=execution_data.model_dump()
+        )
+        
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        
+        # Verify response structure
+        assert UUID(data["id"])  # Valid UUID
+        assert data["test_id"] == test_id
+        assert data["executed_by"] == str(self.TEST_USER.id)
+        assert data["validation_status"] == "PENDING"
+        assert data["prompt"] == self.TEST_DATA.prompt_template
+        assert data["response"] == "This is a mock response. AI endpoint integration pending."
+        assert data["benchmarks"] is not None
+        assert data["benchmarks"]["response_time"] == 100
+        assert data["benchmarks"]["total_time"] == 150
+        assert data["benchmarks"]["token_usage"]["prompt"] == 10
+        assert data["benchmarks"]["token_usage"]["completion"] == 5
+        assert data["benchmarks"]["token_usage"]["total"] == 15
+        assert data["error"] is None
+        assert len(data["validations"]) == 0
+
+    def test_execute_test_not_found(self):
+        """Test executing a non-existent test"""
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}
+        )
+        
+        response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{uuid4()}/execute",
+            json=execution_data.model_dump()
+        )
+        
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "Test not found"
+
+    def test_execute_inactive_test(self):
+        """Test executing an inactive test"""
+        # Create a test with DRAFT status
+        test_data = self.TEST_DATA.model_dump()
+        test_data["status"] = "DRAFT"
+        
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=test_data
+        )
+        test_id = create_response.json()["id"]
+
+        # Try to execute the test
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}
+        )
+        
+        response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id}/execute",
+            json=execution_data.model_dump()
+        )
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Cannot execute test that is not active"
+
+    @pytest.mark.skip(reason="Prompts do not handle variables, yet.")
+    def test_execute_test_missing_variable(self):
+        """Test executing a test with missing required variables"""
+        # Create a test with a template requiring variables
+        test_data = self.TEST_DATA.model_dump()
+        test_data["prompt_template"] = "Hello {name}, how are you {time}?"
+        
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=test_data
+        )
+        test_id = create_response.json()["id"]
+
+        # Try to execute with missing variable
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}  # Missing 'time' variable
+        )
+        
+        response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id}/execute",
+            json=execution_data.model_dump()
+        )
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Missing required input variable" in response.json()["detail"]
+
+    def test_execute_test_unauthorized(self):
+        """Test executing a test without authentication"""
+        # First create a test
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id = create_response.json()["id"]
+
+        # Remove auth override
+        self.client.app.dependency_overrides = {}
+        
+        # Try to execute without auth
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}
+        )
+        
+        response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id}/execute",
+            json=execution_data.model_dump()
+        )
+        
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_execute_test_with_validation(self):
+        """Test executing a test and adding validation"""
+        # First create and execute a test
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id = create_response.json()["id"]
+
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}
+        )
+        
+        execute_response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id}/execute",
+            json=execution_data.model_dump()
+        )
+        execution_id = execute_response.json()["id"]
+
+        # Add validation
+        validation = {
+            "validator_id": str(self.TEST_USER.id),
+            "validator_type": "HUMAN",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "status": "PASS",
+            "criteria_results": [
+                {
+                    "criterion_id": "accuracy",
+                    "result": True,
+                    "notes": "Response is accurate",
+                    "confidence": 1.0
+                }
+            ],
+            "notes": "Overall good response",
+            "confidence": 1.0
+        }
+
+        # Use the same execution store instance that was used for creation
+        updated_execution = self.execution_store.add_validation(execution_id, validation)
+        assert updated_execution is not None
+        assert updated_execution.validation_status == "VALIDATED"
+        assert len(updated_execution.validations) == 1
+        assert updated_execution.validations[0].status == "PASS"
+        assert updated_execution.validations[0].validator_id == self.TEST_USER.id

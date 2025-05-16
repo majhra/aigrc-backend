@@ -207,7 +207,11 @@ class RedisStore(StoreProtocol):
         hash_name = self._get_hash_name(key)
         data = self._hgetall(hash_name)
 
-        self.logger.info(f"Redis get complete: {data['id']}")
+        try:
+            # sometimes this is enpty, mostly on test data
+            self.logger.info(f"Redis get complete: {data['id']}")
+        except Exception as e:
+            pass
         return data
 
     def keys(self):

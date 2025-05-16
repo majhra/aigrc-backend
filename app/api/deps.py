@@ -11,6 +11,7 @@ from app.modules.store_interface import RedisStore, StoreProtocol
 from app.modules.tests_store import MyTestStore
 from app.modules.tlogger import TLogger
 from app.schemas import TokenData, User
+from app.modules.executions_store import ExecutedTestStore
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/user/login", auto_error=False
@@ -117,3 +118,9 @@ async def get_current_user_safe(
     )
 
     return user
+
+def get_execution_store() -> ExecutedTestStore:
+    """
+    Get test execution store instance.
+    """
+    return ExecutedTestStore()

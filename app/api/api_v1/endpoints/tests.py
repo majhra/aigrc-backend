@@ -8,7 +8,9 @@ from app.api import deps
 from app.core.config import settings
 from app.modules.store_interface import StoreProtocol, RedisStore
 from app.schemas import TestSchema, MyTestCreate, TestList, User
+from app.schemas.executions import ExecutedTestCreate, ExecutedTestSchema, ExecutedTestList
 from app.modules.tests_store import MyTestStore
+from app.modules.executions_store import ExecutedTestStore
 
 router = APIRouter()
 
@@ -105,4 +107,99 @@ async def delete_test(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Test not found"
+        )
+
+@router.post("/{test_id}/execute", response_model=ExecutedTestSchema, status_code=status.HTTP_201_CREATED)
+async def execute_test(
+    test_id: UUID,
+    execution: ExecutedTestCreate,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    test_store: StoreProtocol = Depends(deps.get_test_store),
+    execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
+    logger: deps.TLogger = Depends(deps.get_logger),
+) -> ExecutedTestSchema:
+    """
+    Execute a test with the given input variables.
+    """
+    # Get the test
+    test = test_store.get(str(test_id))
+    if not test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test not found"
+        )
+
+    # Check if test is active
+    if test.status != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot execute test that is not active"
+        )
+
+    try:
+        # Use prompt template directly without variable formatting
+        prompt = test.prompt_template
+        logger.info(f"Using prompt for test {test_id}: {prompt}")
+
+        # TODO: Implement actual AI endpoint call
+        # For now, return a mock response
+        response = "This is a mock response. AI endpoint integration pending."
+        benchmarks = {
+            "response_time": 100,
+            "total_time": 150,
+            "token_usage": {
+                "prompt": 10,
+                "completion": 5,
+                "total": 15
+            }
+        }
+
+        logger.info(f"Recording test {test_id}")
+        # Create execution record
+        execution_record = execution_store.create(
+            test_id=str(test_id),
+            execution=execution,
+            user=current_user,
+            prompt=prompt,
+            response=response,
+            benchmarks=benchmarks
+        )
+        
+        logger.info(f"Recorded test {test_id} execution {execution_record}")
+
+        # Update test's last run time and latest execution
+        test_store.update(
+            str(test_id),
+            MyTestCreate(
+                name=test.name,
+                description=test.description,
+                prompt_template=test.prompt_template,
+                interface_type=test.interface_type,
+                connection_config=test.connection_config,
+                validation_config=test.validation_config,
+                tags=test.tags,
+                risk_level=test.risk_level,
+                status=test.status
+            )
+        )
+
+        return execution_record
+
+    except Exception as e:
+        logger.error(f"Error executing test {test_id}: {(e)}")
+        # Create execution record with error
+        error_execution = execution_store.create(
+            test_id=str(test_id),
+            execution=execution,
+            user=current_user,
+            prompt=prompt if 'prompt' in locals() else test.prompt_template,
+            response="",
+            error={
+                "code": "EXECUTION_ERROR",
+                "message": str(e)
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error executing test: {str(e)}"
         ) 

@@ -67,7 +67,7 @@ class TLogger():
                 self.logger.error(str(e))
 
     def error(self, message):
-        self.logger.error(message, stack_info=True, exc_info=True)
+        self.logger.error(message)
 
     def info(self, message):
         self.logger.info(message)
