@@ -63,14 +63,14 @@ async def get_current_user(
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
-        logger.info(f"email: {email}")
+        logger.info(f"get current useremail: {email}")
         token_data = TokenData(email=email)
     except JWTError as e:
         logger.error(f"JWTError: {e}")
         raise credentials_exception
     user = get_user_by_email(token_data.email, user_store)
     logger.info(
-        f"user : {user.full_name}, email: {user.email}, disabled: {user.disabled}"
+        f"username : {user.full_name}, email: {user.email}, id: {user.id}, disabled: {user.disabled}"
     )
     if user is None:
         raise credentials_exception

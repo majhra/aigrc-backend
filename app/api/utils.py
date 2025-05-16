@@ -62,9 +62,13 @@ def get_user(username: str, user_store: StoreProtocol) -> Optional[UserInDB]:
     :param user_store: The user store.
     :return: The user data.
     """
-    user_dict = user_store.get(username)
-    if user_dict:
-        return UserInDB(**user_dict)
+    try:
+        user_dict = user_store.get(username)
+        if user_dict:
+            return UserInDB(**user_dict)
+    except Exception as e:
+        logger.error(f"Error getting user {username}: {e}")
+        raise
 
 def get_user_by_email(username: str, user_store: StoreProtocol) -> Optional[UserInDB]:
     """
@@ -73,10 +77,14 @@ def get_user_by_email(username: str, user_store: StoreProtocol) -> Optional[User
     :param user_store: The user store.
     :return: The user data.
     """
-    user_dict = user_store.get_by_email(username)
-    if user_dict:
-        return UserInDB(**user_dict)
-    
+    try:
+        user_dict = user_store.get_by_email(username)
+        if user_dict:
+            return UserInDB(**user_dict)
+    except Exception as e:
+        logger.error(f"Error getting user by email {username}: {e}")
+        raise
+
 def get_user_uuid_by_email(email: str, user_store: StoreProtocol) -> str | None:
     """
     Get a user's UUID by their email address.
