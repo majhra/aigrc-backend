@@ -207,7 +207,7 @@ class RedisStore(StoreProtocol):
         hash_name = self._get_hash_name(key)
         data = self._hgetall(hash_name)
 
-        self.logger.info(f"Redis get complete: {data}")
+        self.logger.info(f"Redis get complete: {data['id']}")
         return data
 
     def keys(self):

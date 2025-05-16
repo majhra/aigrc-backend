@@ -25,12 +25,17 @@ class MyTestStore:
     ) -> tuple[List[TestSchema], int]:
         # Get all keys
         keys = self._store.keys()
+
         if not keys:
             return [], 0
 
         # Get all tests
-        tests = [self.get(key) for key in keys]
-        tests = [t for t in tests if t is not None]  # Filter out None values
+        try:
+            tests = [self.get(key) for key in keys]
+            tests = [t for t in tests if t is not None]  # Filter out None values
+        except Exception as e:
+            print(f"error: {e}")
+            return [], 0
 
         # Apply filters
         if status:

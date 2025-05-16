@@ -32,7 +32,7 @@ class TestParams(BaseModel):
 
 # Request/Response Models
 class ConnectionConfig(BaseModel):
-    endpoint: str
+    endpoint: str | None = None
     auth_type: str = Field(..., pattern="^(NONE|API_KEY|BEARER_TOKEN)$")
     timeout: Optional[int] = None
 
@@ -48,8 +48,8 @@ class ValidationConfig(BaseModel):
     validation_criteria: List[ValidationCriterion]
 class MyTestCreate(BaseModel):
     name: str
-    description: str
-    prompt_template: str
+    description: str | None = None
+    prompt_template: str | None = None
     interface_type: str = Field(..., pattern="^(DIRECT_LLM|CHATBOT|PLUGIN_ENABLED|CUSTOM_APP)$")
     connection_config: ConnectionConfig
     validation_config: ValidationConfig
