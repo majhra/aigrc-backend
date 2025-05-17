@@ -25,6 +25,10 @@ class TestExecutionDetail(BaseModel):
     test: TestSchema
     execution: ExecutedTestSchema
 
+class TestWithExecutions(BaseModel):
+    test: TestSchema
+    execution_ids: List[UUID]
+
 @router.get("", response_model=TestList)
 async def list_tests(
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
@@ -54,15 +58,16 @@ async def list_tests(
         limit=limit
     )
 
-@router.get("/{test_id}", response_model=TestSchema)
+@router.get("/{test_id}", response_model=TestWithExecutions)
 async def get_test(
     test_id: UUID,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     test_store: StoreProtocol = Depends(deps.get_test_store),
+    execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
     logger: deps.TLogger = Depends(deps.get_logger),
-) -> TestSchema:
+) -> TestWithExecutions:
     """
-    Get test details by ID.
+    Get test details by ID along with associated execution IDs.
     """
     logger.info(f"Getting test with ID: {test_id}")
     test = test_store.get(str(test_id))
@@ -71,7 +76,16 @@ async def get_test(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Test not found"
         )
-    return test
+    
+    # Get execution IDs for this test
+    execution_ids = execution_store.get_execution_ids_for_test(str(test_id))
+    if not execution_ids:
+        execution_ids = []
+    
+    return TestWithExecutions(
+        test=test,
+        execution_ids=[UUID(exec_id) for exec_id in execution_ids]
+    )
 
 @router.post("", response_model=TestSchema, status_code=status.HTTP_201_CREATED)
 async def create_test(
