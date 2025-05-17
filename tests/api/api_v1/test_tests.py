@@ -448,14 +448,7 @@ class TestTests:
             "validator_type": "HUMAN",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "status": "PASS",
-            "criteria_results": [
-                {
-                    "criterion_id": "accuracy",
-                    "result": True,
-                    "notes": "Response is accurate",
-                    "confidence": 1.0
-                }
-            ],
+            "response": "This is a mock response.",
             "notes": "Overall good response",
             "confidence": 1.0
         }
@@ -467,3 +460,339 @@ class TestTests:
         assert len(updated_execution.validations) == 1
         assert updated_execution.validations[0].status == "PASS"
         assert updated_execution.validations[0].validator_id == self.TEST_USER.id
+
+    def test_validate_execution_success(self):
+        """Test successful validation submission"""
+        # First create and execute a test
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id = create_response.json()["id"]
+
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}
+        )
+        
+        execute_response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id}/execute",
+            json=execution_data.model_dump()
+        )
+        execution_id = execute_response.json()["id"]
+
+        # Submit validation
+        validation_data = {
+            "validator_id": str(self.TEST_USER.id),
+            "validator_type": "HUMAN",
+            "status": "PASS",
+            "response": "This is a mock response.",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "notes": "Overall good response",
+            "confidence": 1.0
+        }
+
+        response = self.client.put(
+            f"{settings.API_V1_STR}/tests/{test_id}/{execution_id}/validate",
+            json=validation_data
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        
+        # Verify validation was added
+        assert data["validation_status"] == "VALIDATED"
+        assert len(data["validations"]) == 1
+        validation = data["validations"][0]
+        assert validation["validator_id"] == str(self.TEST_USER.id)
+        assert validation["validator_type"] == "HUMAN"
+        assert validation["status"] == "PASS"
+        #assert validation["criteria_results"][0]["criterion_id"] == "accuracy"
+        #assert validation["criteria_results"][0]["result"] is True
+        assert validation["notes"] == "Overall good response"
+        assert validation["confidence"] == 1.0
+
+    def test_validate_execution_not_found(self):
+        """Test validation for non-existent execution"""
+        # Create a test
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id = create_response.json()["id"]
+
+        validation_data = {
+            "validator_id": str(self.TEST_USER.id),
+            "validator_type": "HUMAN",
+            "status": "PASS",
+            "response": "This is a mock response.",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        fake_execution_id = uuid4()
+
+        response = self.client.put(
+            f"{settings.API_V1_STR}/tests/{test_id}/{fake_execution_id}/validate",
+            json=validation_data
+        )
+        
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "Execution not found"
+
+    def test_validate_execution_wrong_test(self):
+        """Test validation for execution from different test"""
+        # Create two tests
+        create_response1 = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id1 = create_response1.json()["id"]
+
+        test_data2 = self.TEST_DATA.model_dump()
+        test_data2["name"] = "Test 2"
+        create_response2 = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=test_data2
+        )
+        test_id2 = create_response2.json()["id"]
+
+        # Execute test 1
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}
+        )
+        
+        execute_response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id1}/execute",
+            json=execution_data.model_dump()
+        )
+        execution_id = execute_response.json()["id"]
+
+        # Try to validate using test 2's ID
+        validation_data = {
+            "validator_id": str(self.TEST_USER.id),
+            "validator_type": "HUMAN",
+            "status": "PASS",
+            "response": "This is a mock response.",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+        response = self.client.put(
+            f"{settings.API_V1_STR}/tests/{test_id2}/{execution_id}/validate",
+            json=validation_data
+        )
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Execution does not belong to the specified test"
+
+    def test_validate_execution_unauthorized(self):
+        """Test validation without authentication"""
+        # Create and execute a test
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id = create_response.json()["id"]
+
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}
+        )
+        
+        execute_response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id}/execute",
+            json=execution_data.model_dump()
+        )
+        execution_id = execute_response.json()["id"]
+
+        # Remove auth override
+        self.client.app.dependency_overrides = {}
+        
+        validation_data = {
+            "validator_id": str(self.TEST_USER.id),
+            "validator_type": "HUMAN",
+            "status": "PASS",
+            "response": "This is a mock response.",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+        response = self.client.put(
+            f"{settings.API_V1_STR}/tests/{test_id}/{execution_id}/validate",
+            json=validation_data
+        )
+        
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.skip(reason="Not implemented user checks")
+    def test_validate_execution_wrong_validator(self):
+        """Test validation with wrong validator ID"""
+        # Create and execute a test
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id = create_response.json()["id"]
+
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}
+        )
+        
+        execute_response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id}/execute",
+            json=execution_data.model_dump()
+        )
+        execution_id = execute_response.json()["id"]
+
+        # Try to validate with different validator ID
+        validation_data = {
+            "validator_id": str(uuid4()),  # Different UUID
+            "validator_type": "HUMAN",
+            "status": "PASS",
+            "response": "This is a mock response.",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+        response = self.client.put(
+            f"{settings.API_V1_STR}/tests/{test_id}/{execution_id}/validate",
+            json=validation_data
+        )
+        
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json()["detail"] == "Cannot submit validation for another user"
+
+    def test_get_test_execution_success(self):
+        """Test successful retrieval of test execution details"""
+        # First create and execute a test
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id = create_response.json()["id"]
+
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}
+        )
+        
+        execute_response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id}/execute",
+            json=execution_data.model_dump()
+        )
+        execution_id = execute_response.json()["id"]
+
+        # Add a validation to make sure it's included in the response
+        validation_data = {
+            "validator_id": str(self.TEST_USER.id),
+            "validator_type": "HUMAN",
+            "status": "PASS",
+            "response": "This is a mock response.",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "notes": "Overall good response",
+            "confidence": 1.0
+        }
+        self.execution_store.add_validation(execution_id, validation_data)
+
+        # Get the test execution details
+        response = self.client.get(
+            f"{settings.API_V1_STR}/tests/{test_id}/{execution_id}"
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        
+        # Verify test details
+        assert data["test"]["id"] == test_id
+        assert data["test"]["name"] == self.TEST_DATA.name
+        assert data["test"]["description"] == self.TEST_DATA.description
+        
+        # Verify execution details
+        assert data["execution"]["id"] == execution_id
+        assert data["execution"]["test_id"] == test_id
+        assert data["execution"]["executed_by"] == str(self.TEST_USER.id)
+        assert data["execution"]["validation_status"] == "VALIDATED"
+        
+        # Verify validation details
+        assert len(data["execution"]["validations"]) == 1
+        validation = data["execution"]["validations"][0]
+        assert validation["validator_id"] == str(self.TEST_USER.id)
+        assert validation["validator_type"] == "HUMAN"
+        assert validation["status"] == "PASS"
+        assert validation["notes"] == "Overall good response"
+        assert validation["confidence"] == 1.0
+
+    def test_get_test_execution_not_found(self):
+        """Test retrieval of non-existent test execution"""
+        # Create a test
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id = create_response.json()["id"]
+
+        # Try to get non-existent execution
+        non_existent_execution_id = str(uuid4())
+        response = self.client.get(
+            f"{settings.API_V1_STR}/tests/{test_id}/{non_existent_execution_id}"
+        )
+        
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "Execution not found"
+
+    def test_get_test_execution_wrong_test(self):
+        """Test retrieval of execution from different test"""
+        # Create two tests
+        create_response1 = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id1 = create_response1.json()["id"]
+
+        test_data2 = self.TEST_DATA.model_dump()
+        test_data2["name"] = "Test 2"
+        create_response2 = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=test_data2
+        )
+        test_id2 = create_response2.json()["id"]
+
+        # Execute test 1
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}
+        )
+        
+        execute_response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id1}/execute",
+            json=execution_data.model_dump()
+        )
+        execution_id = execute_response.json()["id"]
+
+        # Try to get execution using test 2's ID
+        response = self.client.get(
+            f"{settings.API_V1_STR}/tests/{test_id2}/{execution_id}"
+        )
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Execution does not belong to the specified test"
+
+    def test_get_test_execution_test_not_found(self):
+        """Test retrieval of execution with non-existent test"""
+        # Create and execute a test
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=self.TEST_DATA.model_dump()
+        )
+        test_id = create_response.json()["id"]
+
+        execution_data = ExecutedTestCreate(
+            input_variables={"name": "John"}
+        )
+        
+        execute_response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id}/execute",
+            json=execution_data.model_dump()
+        )
+        execution_id = execute_response.json()["id"]
+
+        # Try to get execution with non-existent test
+        non_existent_test_id = str(uuid4())
+        response = self.client.get(
+            f"{settings.API_V1_STR}/tests/{non_existent_test_id}/{execution_id}"
+        )
+        
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "Test not found"

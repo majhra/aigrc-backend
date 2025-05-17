@@ -30,9 +30,10 @@ class ValidationEvent(BaseModel):
     validator_type: Literal["HUMAN", "AI", "RULE_BASED"]
     timestamp: datetime
     status: Literal["PASS", "FAIL"]
-    criteria_results: List[ValidationCriterionResult]
+    #criteria_results: List[ValidationCriterionResult]
     notes: Optional[str] = None
     confidence: Optional[float] = None
+    response: Optional[str] = None
 
 class ErrorDetails(BaseModel):
     code: str
@@ -69,4 +70,4 @@ class ExecutedTestList(BaseModel):
     items: List[ExecutedTestSchema]
     total: int
     page: int
-    limit: int 
+    limit: int

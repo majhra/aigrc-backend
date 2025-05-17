@@ -247,13 +247,13 @@ src/
          "validator_id": "string",
          "validator_type": "HUMAN" | "AI" | "RULE_BASED",
          "status": "PASS" | "FAIL",
-         "criteria_results": [
-           {
-             "criterion_id": "string",
-             "result": boolean,
-             "notes": "string"
-           }
-         ],
+         #"criteria_results": [
+         #  {
+         #    "criterion_id": "string",
+         #    "result": boolean,
+         #    "notes": "string"
+         #  }
+         #],
          "notes": "string",
          "confidence": number
        }

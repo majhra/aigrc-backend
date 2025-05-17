@@ -1,5 +1,6 @@
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Optional, Literal
 from uuid import UUID
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -8,11 +9,21 @@ from app.api import deps
 from app.core.config import settings
 from app.modules.store_interface import StoreProtocol, RedisStore
 from app.schemas import TestSchema, MyTestCreate, TestList, User
-from app.schemas.executions import ExecutedTestCreate, ExecutedTestSchema, ExecutedTestList
+from app.schemas.executions import (
+    ExecutedTestCreate, 
+    ExecutedTestSchema, 
+    ExecutedTestList,
+    ValidationEvent
+)
 from app.modules.tests_store import MyTestStore
 from app.modules.executions_store import ExecutedTestStore
 
 router = APIRouter()
+
+# New model for the combined test and execution response
+class TestExecutionDetail(BaseModel):
+    test: TestSchema
+    execution: ExecutedTestSchema
 
 @router.get("", response_model=TestList)
 async def list_tests(
@@ -120,6 +131,7 @@ async def execute_test(
 ) -> ExecutedTestSchema:
     """
     Execute a test with the given input variables.
+    Creates a new execution record and establishes the test-execution relationship.
     """
     # Get the test
     test = test_store.get(str(test_id))
@@ -154,8 +166,8 @@ async def execute_test(
             }
         }
 
-        logger.info(f"Recording test {test_id}")
-        # Create execution record
+        logger.info(f"Creating execution record for test {test_id}")
+        # Create execution record (this will automatically update the indexes)
         execution_record = execution_store.create(
             test_id=str(test_id),
             execution=execution,
@@ -165,7 +177,18 @@ async def execute_test(
             benchmarks=benchmarks
         )
         
-        logger.info(f"Recorded test {test_id} execution {execution_record}")
+        # Verify the execution was properly indexed
+        execution_test_id = execution_store.get_test_id_for_execution(execution_record.id)
+        if not execution_test_id or execution_test_id != str(test_id):
+            logger.error(f"Execution {execution_record.id} was not properly indexed for test {test_id}")
+            # Clean up the execution if indexing failed
+            execution_store.delete(execution_record.id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to establish test-execution relationship"
+            )
+
+        logger.info(f"Successfully created and indexed execution {execution_record.id} for test {test_id}")
 
         # Update test's last run time and latest execution
         test_store.update(
@@ -185,21 +208,222 @@ async def execute_test(
 
         return execution_record
 
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already properly formatted
+        raise
     except Exception as e:
-        logger.error(f"Error executing test {test_id}: {(e)}")
+        logger.error(f"Error executing test {test_id}: {str(e)}")
         # Create execution record with error
-        error_execution = execution_store.create(
-            test_id=str(test_id),
-            execution=execution,
-            user=current_user,
-            prompt=prompt if 'prompt' in locals() else test.prompt_template,
-            response="",
-            error={
-                "code": "EXECUTION_ERROR",
-                "message": str(e)
-            }
-        )
+        try:
+            error_execution = execution_store.create(
+                test_id=str(test_id),
+                execution=execution,
+                user=current_user,
+                prompt=prompt if 'prompt' in locals() else test.prompt_template,
+                response="",
+                error={
+                    "code": "EXECUTION_ERROR",
+                    "message": str(e)
+                }
+            )
+            # Clean up the error execution if it was created but indexing failed
+            if error_execution:
+                execution_test_id = execution_store.get_test_id_for_execution(error_execution.id)
+                if not execution_test_id or execution_test_id != str(test_id):
+                    execution_store.delete(error_execution.id)
+        except Exception as cleanup_error:
+            logger.error(f"Error during cleanup of failed execution: {str(cleanup_error)}")
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error executing test: {str(e)}"
-        ) 
+        )
+
+@router.post("/{test_id}/{execution_id}/validate", response_model=ExecutedTestSchema)
+async def validate_execution(
+    test_id: UUID,
+    execution_id: UUID,
+    validation: ValidationEvent,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    test_store: StoreProtocol = Depends(deps.get_test_store),
+    execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
+    logger: deps.TLogger = Depends(deps.get_logger),
+) -> ExecutedTestSchema:
+    """
+    Submit validation for a test execution.
+    """
+
+    raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Not implemented"
+        )
+
+    #The remainder of this code is waiting for finalisation of validations. Keeping it for the moment. 
+    # Get the test
+    execution = execution_store.get(str(execution_id))
+    if not execution:
+        logger.warning(f"Execution {execution_id} for {test_id} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test not found"
+        )
+
+    logger.info(f"Recorded execution {execution_id} base test {test_id}")
+
+    # Get the latest execution for this test
+    executions = execution_store.get_execution_ids_for_test(str(test_id))
+    logger.info(f"Recorded test {test_id} base test {executions}")
+    if not executions or not executions[0]:
+        logger.warning(f"No executions found for this test {test_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No execution found for this test"
+        )
+
+    # Verify validator has permission to validate this test
+    if validation.validator_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot submit validation for another user"
+        )
+
+    # Add timestamp to validation
+    validation_dict = validation.model_dump()
+    validation_dict["timestamp"] = datetime.now(timezone.utc)
+
+    logger.info(f"Recorded test {test_id} validation {validation_dict}")
+
+    try:
+        # Add validation to execution
+        updated_execution = execution_store.add_validation(str(execution.id), validation_dict)
+        if not updated_execution:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to add validation"
+            )
+
+        logger.info(f"Added validation to execution {execution.id} by user {current_user.id}")
+        return updated_execution
+
+    except Exception as e:
+        logger.error(f"Error adding validation to execution {execution.id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error adding validation: {str(e)}"
+        )
+
+@router.put("/{test_id}/{execution_id}/validate", response_model=ExecutedTestSchema)
+async def validate_execution(
+    test_id: UUID,
+    execution_id: UUID,
+    validation: ValidationEvent,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    test_store: StoreProtocol = Depends(deps.get_test_store),
+    execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
+    logger: deps.TLogger = Depends(deps.get_logger),
+) -> ExecutedTestSchema:
+    """
+    Add a new validation to an existing test execution.
+    The execution must exist and belong to the specified test.
+    """
+    # Get the test
+    test = test_store.get(str(test_id))
+    if not test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test not found"
+        )
+
+    # Verify the execution exists and belongs to this test
+    execution_test_id = execution_store.get_test_id_for_execution(str(execution_id))
+    if not execution_test_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Execution not found"
+        )
+    
+    if execution_test_id != str(test_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Execution does not belong to the specified test"
+        )
+
+    # Create validation event with current user's ID
+    validation_dict = validation.model_dump()
+    validation_dict.update({
+        "validator_id": current_user.id,
+        "timestamp": datetime.now(timezone.utc)
+    })
+
+    logger.info(f"Adding validation {validation_dict} to execution {execution_id} for test {test_id}")
+
+    try:
+        # Add validation to execution
+        updated_execution = execution_store.add_validation(str(execution_id), validation_dict)
+        if not updated_execution:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to add validation"
+            )
+
+        logger.info(f"Added validation to execution {execution_id} by user {current_user.id}")
+        return updated_execution
+
+    except Exception as e:
+        logger.error(f"Error adding validation to execution {execution_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error adding validation: {str(e)}"
+        )
+
+@router.get("/{test_id}/{execution_id}", response_model=TestExecutionDetail)
+async def get_test_execution(
+    test_id: UUID,
+    execution_id: UUID,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    test_store: StoreProtocol = Depends(deps.get_test_store),
+    execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
+    logger: deps.TLogger = Depends(deps.get_logger),
+) -> TestExecutionDetail:
+    """
+    Get detailed information about a specific test execution, including:
+    - The test details
+    - The execution record
+    - All validations for this execution
+    """
+    # Get the test
+    test = test_store.get(str(test_id))
+    if not test:
+        logger.warning(f"Test {test_id} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test not found"
+        )
+
+    # Verify the execution exists and belongs to this test
+    execution_test_id = execution_store.get_test_id_for_execution(str(execution_id))
+    if not execution_test_id:
+        logger.warning(f"Execution {execution_id} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Execution not found"
+        )
+    
+    if execution_test_id != str(test_id):
+        logger.warning(f"Execution {execution_id} does not belong to test {test_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Execution does not belong to the specified test"
+        )
+
+    # Get the execution details
+    execution = execution_store.get(str(execution_id))
+    if not execution:
+        logger.warning(f"Execution {execution_id} details not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Execution details not found"
+        )
+
+    logger.info(f"Retrieved execution {execution_id} for test {test_id}")
+    return TestExecutionDetail(test=test, execution=execution) 
