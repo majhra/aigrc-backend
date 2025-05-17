@@ -34,6 +34,15 @@ def get_test_store(logger: TLogger = Depends(get_logger)) -> StoreProtocol:
         logger, "tests", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
     ))
 
+
+def get_execution_store(logger: TLogger = Depends(get_logger)) -> ExecutedTestStore:
+    """
+    Get test execution store instance.
+    """
+    return ExecutedTestStore(RedisStore(
+        logger, "execution", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
+    ))
+
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     user_store: StoreProtocol = Depends(get_user_store),
@@ -119,8 +128,3 @@ async def get_current_user_safe(
 
     return user
 
-def get_execution_store() -> ExecutedTestStore:
-    """
-    Get test execution store instance.
-    """
-    return ExecutedTestStore()

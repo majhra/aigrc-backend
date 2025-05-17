@@ -104,8 +104,8 @@ class TestTests:
         response = self.client.get(f"{settings.API_V1_STR}/tests/{test_id}")
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["id"] == test_id
-        assert data["name"] == self.TEST_DATA.name
+        assert data["test"]["id"] == test_id
+        assert data["test"]["name"] == self.TEST_DATA.name
 
     def test_get_test_not_found(self):
         """Test getting a non-existent test"""

@@ -84,7 +84,7 @@ async def get_test(
     
     return TestWithExecutions(
         test=test,
-        execution_ids=[UUID(exec_id) for exec_id in execution_ids]
+        execution_ids=[exec_id for exec_id in execution_ids]
     )
 
 @router.post("", response_model=TestSchema, status_code=status.HTTP_201_CREATED)
@@ -192,8 +192,8 @@ async def execute_test(
         )
         
         # Verify the execution was properly indexed
-        execution_test_id = execution_store.get_test_id_for_execution(execution_record.id)
-        if not execution_test_id or execution_test_id != str(test_id):
+        logger.info(f"Execution record: {execution_record}")
+        if execution_record.test_id != test_id:
             logger.error(f"Execution {execution_record.id} was not properly indexed for test {test_id}")
             # Clean up the execution if indexing failed
             execution_store.delete(execution_record.id)
@@ -242,8 +242,7 @@ async def execute_test(
             )
             # Clean up the error execution if it was created but indexing failed
             if error_execution:
-                execution_test_id = execution_store.get_test_id_for_execution(error_execution.id)
-                if not execution_test_id or execution_test_id != str(test_id):
+                if execution_record["test_id"] != str(test_id):
                     execution_store.delete(error_execution.id)
         except Exception as cleanup_error:
             logger.error(f"Error during cleanup of failed execution: {str(cleanup_error)}")
@@ -349,14 +348,14 @@ async def validate_execution(
         )
 
     # Verify the execution exists and belongs to this test
-    execution_test_id = execution_store.get_test_id_for_execution(str(execution_id))
+    execution_test_id = execution_store.get(str(execution_id))
     if not execution_test_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Execution not found"
         )
     
-    if execution_test_id != str(test_id):
+    if execution_test_id.test_id != test_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Execution does not belong to the specified test"
@@ -415,7 +414,7 @@ async def get_test_execution(
         )
 
     # Verify the execution exists and belongs to this test
-    execution_test_id = execution_store.get_test_id_for_execution(str(execution_id))
+    execution_test_id = execution_store.get(str(execution_id))
     if not execution_test_id:
         logger.warning(f"Execution {execution_id} not found")
         raise HTTPException(
@@ -423,7 +422,7 @@ async def get_test_execution(
             detail="Execution not found"
         )
     
-    if execution_test_id != str(test_id):
+    if execution_test_id.test_id != test_id:
         logger.warning(f"Execution {execution_id} does not belong to test {test_id}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

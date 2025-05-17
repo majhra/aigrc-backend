@@ -80,9 +80,23 @@ class RedisStore(StoreProtocol):
             encoded = str(obj).lower()  # Convert bool to 'true' or 'false'
         elif isinstance(obj, uuid.UUID):
             encoded = str(obj)
+        elif isinstance(obj, dict):
+            # First encode all values in the dictionary
+            encoded_dict = {k: self._encoder(v) for k, v in obj.items()}
+            # Then serialize the whole dictionary
+            return msgpack.packb(encoded_dict)
+        elif isinstance(obj, list):
+            # First encode all items in the list
+            encoded_list = [self._encoder(item) for item in obj]
+            # Then serialize the whole list
+            return msgpack.packb(encoded_list)
         else:
-            # For any other type (dict, list, custom objects), use msgpack
-            encoded = msgpack.packb(obj)
+            # For any other type (custom objects), use msgpack
+            try:
+                encoded = msgpack.packb(obj)
+            except Exception as e:
+                self.logger.error(f"Failed to encode object of type {type(obj)}: {e}")
+                raise
             
         self.logger.debug(f"Encoded value: {encoded} of type {type(encoded)}")
         return encoded
@@ -101,6 +115,10 @@ class RedisStore(StoreProtocol):
                     return True
                 if obj.lower() == 'false':
                     return False
+                try:
+                    return uuid.UUID(obj)
+                except ValueError:
+                    pass
                 return obj
         if isinstance(obj, bytes):
             # Try msgpack first
@@ -121,6 +139,10 @@ class RedisStore(StoreProtocol):
                         return True
                     if decoded.lower() == 'false':
                         return False
+                    try:
+                        return uuid.UUID(decoded)
+                    except ValueError:
+                        pass
                     return decoded
                 except UnicodeDecodeError:
                     return obj

@@ -9,15 +9,7 @@ from app.schemas import User
 class ExecutedTestStore:
     def __init__(self, store: StoreProtocol = None):
         self._store = store or LocalStore()
-        self._prefix = "execution:"
-        self._execution_to_test_prefix = "execution_to_test:"
         self._test_to_executions_prefix = "test_to_executions:"
-
-    def _get_key(self, execution_id: str) -> str:
-        return f"{self._prefix}{execution_id}"
-
-    def _get_execution_to_test_key(self, execution_id: str) -> str:
-        return f"{self._execution_to_test_prefix}{execution_id}"
 
     def _get_test_to_executions_key(self, test_id: str) -> str:
         return f"{self._test_to_executions_prefix}{test_id}"
@@ -25,37 +17,36 @@ class ExecutedTestStore:
     def _update_indexes(self, execution_id: str, test_id: str, is_delete: bool = False) -> None:
         """Update both indexes when an execution is created or deleted."""
         if is_delete:
-            # Remove from execution_to_test index
-            self._store.pop(self._get_execution_to_test_key(execution_id))
-            
             # Remove from test_to_executions index
             test_key = self._get_test_to_executions_key(test_id)
-            executions = set(self._store.get(test_key) or [])
-            executions.discard(execution_id)
-            if executions:
-                self._store.put(test_key, list(executions))
-            else:
-                self._store.pop(test_key)
+            data = self._store.get(test_key)
+            if data:
+                executions = set(data.get("executions", []))
+                executions.discard(execution_id)
+                if executions:
+                    self._store.put(test_key, {"executions": list(executions)})
+                else:
+                    self._store.pop(test_key)
         else:
-            # Add to execution_to_test index
-            self._store.put(self._get_execution_to_test_key(execution_id), test_id)
-            
             # Add to test_to_executions index
             test_key = self._get_test_to_executions_key(test_id)
-            executions = set(self._store.get(test_key) or [])
+            data = self._store.get(test_key)
+            executions = set(data.get("executions", []) if data else [])
             executions.add(execution_id)
-            self._store.put(test_key, list(executions))
-
-    def get_test_id_for_execution(self, execution_id: str) -> Optional[str]:
-        """Get the test ID associated with an execution ID."""
-        return self._store.get(self._get_execution_to_test_key(execution_id))
+            self._store.put(test_key, {"executions": list(executions)})
 
     def get_execution_ids_for_test(self, test_id: str) -> List[str]:
         """Get all execution IDs associated with a test ID."""
-        return self._store.get(self._get_test_to_executions_key(test_id)) or []
+        data = self._store.get(self._get_test_to_executions_key(test_id))
+        return data.get("executions", []) if data else []
+
+    def get_test_id_for_execution(self, execution_id: str) -> Optional[str]:
+        """Get the test ID associated with an execution ID."""
+        data = self._store.get(execution_id)
+        return data.get("test_id") if data else None
 
     def get(self, execution_id: str) -> Optional[ExecutedTestSchema]:
-        data = self._store.get(self._get_key(execution_id))
+        data = self._store.get(execution_id)
         if not data:
             return None
         return ExecutedTestSchema(**data)
@@ -68,8 +59,8 @@ class ExecutedTestStore:
         status: Optional[str] = None,
         result: Optional[str] = None,
     ) -> Tuple[List[ExecutedTestSchema], int]:
-        # Get all keys with prefix
-        keys = [k for k in self._store.keys() if k.startswith(self._prefix)]
+        # Get all keys
+        keys = self._store.keys()
 
         if not keys:
             return [], 0
@@ -77,7 +68,11 @@ class ExecutedTestStore:
         # Get all executions
         executions = []
         for key in keys:
-            execution = self.get(key[len(self._prefix):])
+            # Skip index keys
+            if key.startswith(self._test_to_executions_prefix):
+                continue
+                
+            execution = self.get(key)
             if execution and str(execution.test_id) == test_id:
                 # Apply filters
                 if status and execution.validation_status != status:
@@ -126,7 +121,7 @@ class ExecutedTestStore:
         )
         
         # Store the execution and update indexes
-        self._store.put(self._get_key(execution_id), new_execution.model_dump())
+        self._store.put(execution_id, new_execution.model_dump())
         self._update_indexes(execution_id, test_id)
         return new_execution
 
@@ -146,18 +141,19 @@ class ExecutedTestStore:
         if len(execution.validations) > 0:
             execution.validation_status = "VALIDATED"
         
-        self._store.put(self._get_key(execution_id), execution.model_dump())
+        self._store.put(execution_id, execution.model_dump())
         return execution
 
     def delete(self, execution_id: str) -> bool:
-        # Get the test_id before deleting
-        test_id = self.get_test_id_for_execution(execution_id)
-        if not test_id:
-            self.logger.error(f"Deleting Execution {execution_id}: Not Found")
+        # Get test_id before deleting
+        execution = self.get(execution_id)
+        if execution is None:
             return False
             
+        test_id = str(execution.test_id)
+            
         # Delete the execution and update indexes
-        data = self._store.pop(self._get_key(execution_id))
+        data = self._store.pop(execution_id)
         if data is not None:
             self._update_indexes(execution_id, test_id, is_delete=True)
         return data is not None
@@ -165,16 +161,7 @@ class ExecutedTestStore:
     def clear(self) -> None:
         """Clear all executions and indexes from the store. Used for testing."""
         if isinstance(self._store, LocalStore):
-            # Clear all execution records
-            keys_to_delete = [k for k in self._store.keys() if k.startswith(self._prefix)]
-            for key in keys_to_delete:
-                self._store.pop(key)
-            
-            # Clear all indexes
-            keys_to_delete = [k for k in self._store.keys() if k.startswith(self._execution_to_test_prefix)]
-            for key in keys_to_delete:
-                self._store.pop(key)
-                
-            keys_to_delete = [k for k in self._store.keys() if k.startswith(self._test_to_executions_prefix)]
+            # Clear all execution records and indexes
+            keys_to_delete = self._store.keys()
             for key in keys_to_delete:
                 self._store.pop(key) 
