@@ -35,6 +35,18 @@ class TestExecutedTestStore(unittest.TestCase):
             input_variables={"key": "value"}
         )
         
+        # Create sample benchmarks for testing
+        self.benchmarks = PerformanceMetrics(
+            response_time=100,
+            total_time=150,
+            token_usage=TokenUsage(
+                prompt=10,
+                completion=5,
+                total=15
+            ),
+            cost=0.001
+        )
+        
         # Create sample executions for testing
         self.executions = []
         for i in range(3):
@@ -81,24 +93,13 @@ class TestExecutedTestStore(unittest.TestCase):
 
     def test_create_execution_basic(self):
         """Test creating a basic execution"""
-        benchmarks = PerformanceMetrics(
-            response_time=100,
-            total_time=150,
-            token_usage=TokenUsage(
-                prompt=10,
-                completion=5,
-                total=15
-            ),
-            cost=0.001
-        )
-        
         execution = self.executed_test_store.create(
             test_id=self.test_id,
             execution=self.test_execution_create,
             user=self.test_user,
             prompt="test prompt",
             response="test response",
-            benchmarks=benchmarks,
+            benchmarks=self.benchmarks,
             error=None
         )
         
@@ -107,12 +108,12 @@ class TestExecutedTestStore(unittest.TestCase):
         self.assertEqual(execution.executed_by, self.test_user.id)
         self.assertEqual(execution.prompt, "test prompt")
         self.assertEqual(execution.response, "test response")
-        self.assertEqual(execution.benchmarks.response_time, 100)
-        self.assertEqual(execution.benchmarks.total_time, 150)
-        self.assertEqual(execution.benchmarks.token_usage.prompt, 10)
-        self.assertEqual(execution.benchmarks.token_usage.completion, 5)
-        self.assertEqual(execution.benchmarks.token_usage.total, 15)
-        self.assertEqual(execution.benchmarks.cost, 0.001)
+        self.assertEqual(execution.benchmarks.response_time, self.benchmarks.response_time)
+        self.assertEqual(execution.benchmarks.total_time, self.benchmarks.total_time)
+        self.assertEqual(execution.benchmarks.token_usage.prompt, self.benchmarks.token_usage.prompt)
+        self.assertEqual(execution.benchmarks.token_usage.completion, self.benchmarks.token_usage.completion)
+        self.assertEqual(execution.benchmarks.token_usage.total, self.benchmarks.token_usage.total)
+        self.assertEqual(execution.benchmarks.cost, self.benchmarks.cost)
         self.assertIsNone(execution.error)
         self.assertEqual(execution.validation_status, "PENDING")
         self.assertEqual(len(execution.validations), 0)
@@ -316,16 +317,7 @@ class TestExecutedTestStore(unittest.TestCase):
             user=User(id=str(uuid4()), email="test2@example.com"),
             prompt="test prompt 2",
             response="test response 2",
-            benchmarks=PerformanceMetrics(
-                response_time=100,
-                total_time=150,
-                token_usage=TokenUsage(
-                    prompt=10,
-                    completion=5,
-                    total=15
-                ),
-                cost=0.001
-            )
+            benchmarks=self.benchmarks
         )
         
         # Clear store
