@@ -16,6 +16,9 @@ class ExecutedTestStore:
 
     def _update_indexes(self, execution_id: str, test_id: str, is_delete: bool = False) -> None:
         """Update both indexes when an execution is created or deleted."""
+        # hard force this to string, sometimes might be UUID
+        execution_id = str(execution_id)
+        test_id = str(test_id)
         if is_delete:
             # Remove from test_to_executions index
             test_key = self._get_test_to_executions_key(test_id)
@@ -39,11 +42,6 @@ class ExecutedTestStore:
         """Get all execution IDs associated with a test ID."""
         data = self._store.get(self._get_test_to_executions_key(test_id))
         return data.get("executions", []) if data else []
-
-    def get_test_id_for_execution(self, execution_id: str) -> Optional[str]:
-        """Get the test ID associated with an execution ID."""
-        data = self._store.get(execution_id)
-        return data.get("test_id") if data else None
 
     def get(self, execution_id: str) -> Optional[ExecutedTestSchema]:
         data = self._store.get(execution_id)
@@ -131,6 +129,7 @@ class ExecutedTestStore:
         validation: Dict
     ) -> Optional[ExecutedTestSchema]:
         execution = self.get(execution_id)
+
         if not execution:
             return None
 
@@ -140,7 +139,6 @@ class ExecutedTestStore:
         # Update validation status
         if len(execution.validations) > 0:
             execution.validation_status = "VALIDATED"
-        
         self._store.put(execution_id, execution.model_dump())
         return execution
 

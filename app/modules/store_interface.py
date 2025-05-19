@@ -286,13 +286,13 @@ class LocalStore(StoreProtocol):
         self.email_index: Dict[str, str] = {}  # Maps email to UUID
 
     def put(self, key: str, value: dict) -> None:
-        self.data[key] = value
+        self.data[str(key)] = value
         # Update email index if email is present
         if 'email' in value and value['email']:
             self.email_index[value['email']] = key
 
     def get(self, key: str) -> Dict[str, str] | None:
-        return self.data.get(key, None)
+        return self.data.get(str(key), None)
 
     def get_by_email(self, email: str) -> Dict[str, str] | None:
         # Get UUID from email index
@@ -307,7 +307,7 @@ class LocalStore(StoreProtocol):
 
     def pop(self, key: str) -> dict | None:
         # Remove from email index if email exists
-        user_data = self.data.get(key)
+        user_data = self.data.get(str(key))
         if user_data and 'email' in user_data:
             self.email_index.pop(user_data['email'], None)
-        return self.data.pop(key, None)
+        return self.data.pop(str(key), None)
