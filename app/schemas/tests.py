@@ -63,9 +63,9 @@ class TestUpdate(MyTestCreate):
 class TestSchema(MyTestCreate):
     id: UUID
     created_by: UUID
-    created_at: str
-    updated_at: str
-    lastRun_at: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    lastRun_at: Optional[datetime] = None
     latest_execution_id: Optional[UUID] = None
 
 class TestList(BaseModel):

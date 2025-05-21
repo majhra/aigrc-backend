@@ -71,7 +71,8 @@ class RedisStore(StoreProtocol):
         self.logger.debug(f"Encoding value: {obj} of type {type(obj)}")
         
         if obj is None:
-            encoded = ""
+            # Always encode None using msgpack to ensure consistent handling
+            return msgpack.packb(None)
         elif isinstance(obj, datetime):
             encoded = obj.isoformat()
         elif isinstance(obj, (str, int, float)):
@@ -103,8 +104,10 @@ class RedisStore(StoreProtocol):
 
     def _decoder(self, obj):
         """Function to deserialise objects from Redis"""
-        if obj is None or obj == b'' or obj == "":  # Handle empty values as None
+        if obj is None or obj == b'':  # Handle empty bytes as None
             return None
+        if obj == "":  # Handle empty string as empty string
+            return ""
         if isinstance(obj, str):
             # Try to parse as datetime first
             try:
@@ -124,12 +127,8 @@ class RedisStore(StoreProtocol):
             # Try msgpack first
             try:
                 decoded = msgpack.unpackb(obj)
-                # Recursively decode any nested bytes objects
-                if isinstance(decoded, dict):
-                    return {k: self._decoder(v) for k, v in decoded.items()}
-                if isinstance(decoded, list):
-                    return [self._decoder(v) for v in decoded]
-                return decoded
+                # Recursively decode the entire structure
+                return self._decoder(decoded)
             except (msgpack.exceptions.ExtraData, msgpack.exceptions.UnpackException):
                 # If not msgpack, try UTF-8
                 try:
@@ -143,9 +142,19 @@ class RedisStore(StoreProtocol):
                         return uuid.UUID(decoded)
                     except ValueError:
                         pass
+                    # Try to parse as datetime
+                    try:
+                        return datetime.fromisoformat(decoded)
+                    except ValueError:
+                        pass
                     return decoded
                 except UnicodeDecodeError:
                     return obj
+        # If we get a dict or list, recursively decode their values
+        if isinstance(obj, dict):
+            return {k: self._decoder(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [self._decoder(v) for v in obj]
         return obj
 
     def put(self, key: str, value: dict):

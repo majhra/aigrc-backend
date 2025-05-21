@@ -60,7 +60,7 @@ class MyTestStore:
         return paginated_tests, total
 
     def create(self, test: MyTestCreate, user: User) -> TestSchema:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
         test_id = str(uuid4())
         
         new_test = TestSchema(
@@ -80,7 +80,7 @@ class MyTestStore:
             return None
             
         existing_test = TestSchema(**existing_data)
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
         
         updated_test = TestSchema(
             id=test_id,

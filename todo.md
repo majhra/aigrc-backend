@@ -12,3 +12,5 @@
 [ ] - user validation for tests, executions, etc.
 [ ] - only draft tests can be changed or deleted. 
 [ ] - copy test to draft.
+[ ] - security around the test init. Server side, how to ensure the requester is also the owner of the target chatbot, else it's a security exploit (ddos etc). On the browser, handle CORS. Handle logins. 
+

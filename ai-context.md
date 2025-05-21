@@ -240,7 +240,7 @@ src/
          }
        }
        ```
-   - `POST /api/v1.0/tests/{test_id}/executions/{execution_id}/validate` - Submit validation
+   - `POST /api/v1.0/tests/{test_id}/{execution_id}/validate` - Submit validation
      - Request Body:
        ```json
        {
@@ -317,12 +317,7 @@ src/
    - POST /api/prompts/
    - PUT /api/prompts/{id}
 
-8. **Validations:**
-   - GET /api/validations
-   - POST /api/validations
-   - PUT /api/validations/{id}
-
-9. **Reports:**
+8. **Reports:**
    - GET /api/reports/summary
    - GET /api/reports/validation-status
    - GET /api/reports/compliance

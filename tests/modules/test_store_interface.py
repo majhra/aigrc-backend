@@ -24,8 +24,8 @@ class TestStoreInterface(unittest.TestCase):
                         "email": "gorocoaico+test1@gmail.com",
                         "password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
                         "disabled": False,
-                        "created_at": "2021-01-01T00:00:00",
-                        "last_login": "2021-01-01T00:00:00",
+                        "created_at": datetime(2021, 1, 1, 0, 0),
+                        "last_login": datetime(2021, 1, 1, 0, 0),
                     },
                 },
                 "packed": {
@@ -59,8 +59,8 @@ class TestStoreInterface(unittest.TestCase):
                         "email": "gorocoaico+test2@gmail.com",
                         "password": "randompassword",
                         "disabled": False,  # This will be encoded as 'false'
-                        "created_at": "2021-01-01T00:00:00",
-                        "last_login": "2021-01-01T00:00:00",
+                        "created_at": datetime(2021, 1, 1, 0, 0),
+                        "last_login": datetime(2021, 1, 1, 0, 0),
                     },
                 },
                 "packed": {
