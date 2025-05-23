@@ -519,17 +519,27 @@ async def get_user_by_id(
     """
     try:
         # Try to get user by UUID
-        user = get_user_by_email(str(user_id), user_store)
+        user_data = get_user(str(user_id), user_store)
         
-        if user is None:
+        if user_data is None:
             logger.info(f"User not found: {user_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
             
+        # Convert user data to UserResponse model, ensuring UUID is converted to string
+        user_response = UserResponse(
+            id=str(user_data.id),  # Convert UUID to string
+            email=user_data.email,
+            full_name=user_data.full_name,
+            created_at=user_data.created_at or datetime.now(timezone.utc),
+            is_verified=user_data.is_verified or False,
+            disabled=user_data.disabled or False
+        )
+            
         # TODO: Add authorization check (admin or self)
-        return JSONResponse(content=UserResponse.model_validate(user).model_dump())
+        return JSONResponse(content=user_response.model_dump(mode="json"))
     except HTTPException:
         raise
     except Exception as e:
@@ -560,8 +570,18 @@ async def get_user_via_email(
                 detail="User not found"
             )
             
+        # Convert user data to UserResponse model, ensuring UUID is converted to string
+        user_response = UserResponse(
+            id=str(user_data.id),  # Convert UUID to string
+            email=user_data.email,
+            full_name=user_data.full_name,
+            created_at=user_data.created_at or datetime.now(timezone.utc),
+            is_verified=user_data.is_verified or False,
+            disabled=user_data.disabled or False
+        )
+            
         # TODO: Add authorization check (admin or self)
-        return JSONResponse(content=UserResponse.model_validate(user_data).model_dump())
+        return JSONResponse(content=user_response.model_dump(mode="json"))
     except HTTPException:
         raise
     except Exception as e:

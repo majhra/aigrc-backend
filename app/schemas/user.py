@@ -22,6 +22,10 @@ class UserResponse(BaseModel):
     is_verified: bool
     disabled: bool
 
+    @field_validator("email", mode="before")
+    def lowercase_and_strip_email(cls, email, **kwargs):
+        return utils.format_email(email)
+
 
 class RegistrationUserRepsonse(BaseModel):
     message: str
@@ -51,6 +55,12 @@ class User(BaseModel):
         if v is None:
             return uuid.uuid4()
         return v
+
+    @field_validator("email", mode="before")
+    def lowercase_and_strip_email(cls, email, **kwargs):
+        if email is None:
+            return None
+        return utils.format_email(email)
 
 
 class UserInDB(User):

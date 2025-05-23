@@ -78,7 +78,7 @@ def get_user_by_email(username: str, user_store: StoreProtocol) -> Optional[User
     :return: The user data.
     """
     try:
-        user_dict = user_store.get_by_email(username)
+        user_dict = user_store.get_by_email(username.lower())
         if user_dict:
             return UserInDB(**user_dict)
     except Exception as e:
@@ -100,7 +100,7 @@ def get_user_uuid_by_email(email: str, user_store: StoreProtocol) -> str | None:
         Exception: If there is an error accessing the store
     """
     try:
-        user_dict = user_store.get_by_email(email)
+        user_dict = user_store.get_by_email(email.lower())
         if user_dict:
             return user_dict['id']
         return None

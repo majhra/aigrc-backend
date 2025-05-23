@@ -99,39 +99,60 @@ src/
 └── index.tsx         # Application entry point
 ```
 
+### Backend Directory Structure
+
+```
+app/
+├── api/              # FastAPI application structure
+    ├── api_v1/             # Core business logic
+        ├── endpoints/          # Endpoint definitions
+    ├── schemas/            # Pydantic models
+    ├── services/           # Service definitions
+    ├── tests/              # Test files
+    ├── utils/              # Utility functions
+    ├── db/                 # Database models and operations
+    ├── assets/             # additional assets
+    ├── core/               # Core config
+    ├── modules/            # Module definitions
+    ├── schemas/            # Pydantic models
+    ├── main.py             # FastAPI application entry point
+├── requirements/         # Requirements for prod and dev
+├── tests/            # Test files
+```
+
 ### Core Features & Screens
 
-1. **Authentication**
+1. **Authentication** 
    - Login/Registration
    - Password reset
    - Account management
 
-2. **Dashboard**
+2. **Dashboard** 
    - Summary metrics
    - Recent activity
    - Quick actions
 
-3. **Prompt Library**
+3. **Prompt Library** 
    - View/manage standard prompts
    - Categorized prompt display
    - Prompt selection for testing
 
-4. **Test Execution**
+4. **Test Execution** 
    - Prompt selection and execution
    - Configuration selection
    - Response display and formatting
 
-5. **Validation Workspace**
+5. **Validation Workspace** 
    - Side-by-side prompt/response review
    - Pass/fail evaluation
    - Comment submission
 
-6. **Reports & Analytics**
+6. **Reports & Analytics** 
    - Summary statistics
    - Filterable data tables
    - Export functionality
 
-7. **Settings & Configuration**
+7. **Settings & Configuration** 
    - AI endpoint configuration
    - User management (admin)
    - System preferences
@@ -162,7 +183,7 @@ src/
 
 ### Core API Endpoints (Expected from Python Backend)
 
-1. **Authentication:**
+1. **Authentication:**  (api/api_v1/endpoints/user.py)
    - `POST /api/v1.0/user/login` - User login with JWT token generation
    - `POST /api/v1.0/user/register` - New user registration
    - `POST /api/v1.0/user/verify_email` - Email verification
@@ -170,7 +191,7 @@ src/
    - `POST /api/v1.0/user/password_reset/request` - Request password reset
    - `POST /api/v1.0/user/password_reset/verify` - Verify and set new password
 
-2. **Users:**
+2. **Users:** (api/api_v1/endpoints/user.py)
    - `GET /api/v1.0/user/me` - Get current user profile
    - `POST /api/v1.0/user/update_profile` - Update user profile
    - `POST /api/v1.0/user/support` - Submit support request
@@ -180,7 +201,7 @@ src/
    - `POST /api/v1.0/user/users` - Create new user (admin only)
    - `PUT /api/v1.0/user/users/{user_id}` - Update user (admin only)
 
-3. **Tests:**
+3. **Tests:**  (api/api_v1/endpoints/tests.py)
    - `GET /api/v1.0/tests` - List all tests (paginated)
      - Query Parameters:
        - `page`: Page number (default: 1)
@@ -223,7 +244,7 @@ src/
      - Request Body: Same as POST
    - `DELETE /api/v1.0/tests/{test_id}` - Delete test
 
-4. **Test Executions:**
+4. **Test Executions:**  (api/api_v1/endpoints/tests.py)
    - `GET /api/v1.0/tests/{test_id}/executions` - List test executions
      - Query Parameters:
        - `page`: Page number (default: 1)
@@ -308,7 +329,7 @@ src/
    - POST /api/configurations
    - PUT /api/configurations/{id}
 
-7. **Prompts:**
+7. **Prompts:** (api/api_v1/endpoints/prompts.py)
    - GET /api/prompts/categories
    - GET /api/prompts/categories/{id}
    - POST /api/prompts/categories

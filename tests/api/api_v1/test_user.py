@@ -913,6 +913,253 @@ class TestUser:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.json() == expected_response
 
+    def test_get_user_by_id_success(self, request):
+        """Test successful retrieval of user by ID"""
+        app = request.instance.app
+        client = request.instance.client
+        user_store = request.instance.user_store
+
+        # Set up user store dependency
+        app.dependency_overrides[deps.get_user_store] = lambda: user_store
+
+        password_plain_text = request.instance.valid_passwords[0]
+        password_reset_code = "FGD69G"
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": "gorocoaico+test_get_user_by_id_success@gmail.com",
+            "full_name": None,
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": None,
+            "last_login": None,
+            "is_verified": True,
+            "verification_code": None,
+            "verification_code_expires_at": None,
+            "password_reset_code": password_reset_code,
+            "password_reset_code_expires_at": (
+                datetime.now() - timedelta(days=10)
+            ).replace(tzinfo=timezone.utc),
+        }
+
+        # Store the user and verify it was stored
+        user_store.put(user["id"], user)
+        
+        # Verify user exists in store
+        stored_user = user_store.get(user["id"])
+        assert stored_user is not None, f"User not found in store with ID {user['id']}"
+        assert stored_user["id"] == user["id"], f"Stored user ID {stored_user['id']} doesn't match {user['id']}"
+        
+        # Get user by email to verify email index
+        user_data = get_user_by_email(user['email'], user_store)
+        assert user_data is not None, f"User not found in store with email {user['email']}"
+        assert str(user_data.id) == user["id"], f"User data ID {user_data.id} doesn't match {user['id']}"
+
+        # Mock current user for authentication
+        app.dependency_overrides[deps.get_current_user] = lambda: User(**user)
+
+        # Test getting user by ID
+        print(f"\nDebug: Attempting to get user with ID {user['id']}")
+        print(f"Debug: User store contains: {list(user_store.keys())}")
+        
+        response = client.get(f"{settings.API_V1_STR}/user/users/{user['id']}")
+        print(f"Debug: Response status: {response.status_code}")
+        print(f"Debug: Response body: {response.json() if response.status_code != 404 else 'Not Found'}")
+        
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["id"] == user["id"]
+        assert data["email"] == user["email"]
+        assert data["is_verified"] == user["is_verified"]
+        assert "password" not in data
+
+    def test_get_user_by_id_not_found(self, request):
+        """Test getting a non-existent user by ID"""
+        app = request.instance.app
+        client = request.instance.client
+
+        # Get the existing test user for authentication
+        test_user = User(
+            email="gorocoaico@gmail.com",
+            password=request.instance.valid_passwords[0],
+        )
+
+        # Mock current user for authentication
+        app.dependency_overrides[deps.get_current_user] = lambda: test_user
+
+        # Test getting non-existent user
+        response = client.get(f"{settings.API_V1_STR}/user/users/{uuid.uuid4()}")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "User not found"
+
+    def test_get_user_by_email_success(self, request):
+        """Test successful retrieval of user by email"""
+        app = request.instance.app
+        client = request.instance.client
+        user_store = request.instance.user_store
+
+        # Set up user store dependency
+        app.dependency_overrides[deps.get_user_store] = lambda: user_store
+
+        password_plain_text = request.instance.valid_passwords[0]
+        password_reset_code = "FGD69G"
+        test_user = {
+            "id": str(uuid.uuid4()),
+            "email": "gorocoaico+test_get_user_by_email_success@gmail.com",
+            "full_name": None,
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": None,
+            "last_login": None,
+            "is_verified": True,
+            "verification_code": None,
+            "verification_code_expires_at": None,
+            "password_reset_code": password_reset_code,
+            "password_reset_code_expires_at": (
+                datetime.now() - timedelta(days=10)
+            ).replace(tzinfo=timezone.utc),
+        }
+
+        # Store the user and verify it was stored
+        user_store.put(test_user["id"], test_user)
+        user_data = get_user_by_email(test_user['email'], user_store)
+        assert user_data is not None, "Test user not found in store"
+
+        # Mock current user for authentication - use User model instance
+        app.dependency_overrides[deps.get_current_user] = lambda: User(**test_user)
+
+        # Test getting user by email
+        response = client.get(f"{settings.API_V1_STR}/user/users/email/{user_data.email}")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["id"] == str(user_data.id)
+        assert data["email"] == user_data.email
+        assert data["is_verified"] == user_data.is_verified
+        assert "password" not in data  # Password should not be exposed
+
+    def test_get_user_by_email_not_found(self, request):
+        """Test getting a non-existent user by email"""
+        app = request.instance.app
+        client = request.instance.client
+
+        # Get the existing test user for authentication
+        test_user = User(
+            email="gorocoaico@gmail.com",
+            password=request.instance.valid_passwords[0],
+        )
+
+        # Mock current user for authentication
+        app.dependency_overrides[deps.get_current_user] = lambda: test_user
+
+        # Test getting non-existent user
+        response = client.get(f"{settings.API_V1_STR}/user/users/email/nonexistent@example.com")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "User not found"
+
+    def test_get_user_by_email_case_insensitive(self, request):
+        """Test that email lookup is case insensitive"""
+        app = request.instance.app
+        client = request.instance.client
+        user_store = request.instance.user_store
+
+        password_plain_text = request.instance.valid_passwords[0]
+        password_reset_code = "FGD69G"
+        test_user = {
+            "id": str(uuid.uuid4()),
+            "email": "gorocoaico+test_get_user_by_email_case_insensitive@gmail.com",
+            "full_name": None,
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": None,
+            "last_login": None,
+            "is_verified": True,
+            "verification_code": None,
+            "verification_code_expires_at": None,
+            "password_reset_code": password_reset_code,
+            "password_reset_code_expires_at": (
+                datetime.now() - timedelta(days=10)
+            ).replace(tzinfo=timezone.utc),
+        }
+
+        # Store the user in the store first
+        user_store.put(test_user["id"], test_user)
+
+        # Set up user store dependency after we have the test user
+        app.dependency_overrides[deps.get_current_user] = lambda: User(**test_user)
+
+        user_data = get_user_by_email(test_user['email'], user_store)
+        assert user_data is not None, "Test user not found in store"
+
+        # Test with uppercase email
+        response = client.get(f"{settings.API_V1_STR}/user/users/email/{user_data.email.upper()}")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["email"] == user_data.email  # Should return original case
+        assert data["id"] == str(user_data.id)
+
+    @pytest.mark.skip(reason="Authorization checks not implemented yet")
+    def test_get_user_by_id_authorization(self, request):
+        """Test authorization for getting user by ID"""
+        app = request.instance.app
+        client = request.instance.client
+        user_store = request.instance.user_store
+
+        # Get the existing test user from the fixture
+        test_user = User(
+            email="gorocoaico@gmail.com",
+            password=request.instance.valid_passwords[0],
+        )
+        user_data = get_user_by_email(test_user.email, user_store)
+        assert user_data is not None, "Test user not found in store"
+
+        # Create a second user for testing authorization
+        other_user = {
+            "id": str(uuid.uuid4()),
+            "email": "other@example.com",
+            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "is_verified": True,
+        }
+        user_store.put(other_user["id"], other_user)
+
+        # Mock current user as test_user
+        app.dependency_overrides[deps.get_current_user] = lambda: User(**test_user)
+
+        # Try to get other user's details
+        response = client.get(f"{settings.API_V1_STR}/users/{other_user['id']}")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json()["detail"] == "Not authorized to access this user's details"
+
+    @pytest.mark.skip(reason="Authorization checks not implemented yet")
+    def test_get_user_by_email_authorization(self, request):
+        """Test authorization for getting user by email"""
+        app = request.instance.app
+        client = request.instance.client
+        user_store = request.instance.user_store
+
+        # Get the existing test user from the fixture
+        test_user = User(
+            email="gorocoaico@gmail.com",
+            password=request.instance.valid_passwords[0],
+        )
+        user_data = get_user_by_email(test_user.email, user_store)
+        assert user_data is not None, "Test user not found in store"
+
+        # Create a second user for testing authorization
+        other_user = {
+            "id": str(uuid.uuid4()),
+            "email": "other@example.com",
+            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "is_verified": True,
+        }
+        user_store.put(other_user["id"], other_user)
+
+        # Mock current user as test_user
+        app.dependency_overrides[deps.get_current_user] = lambda: User(**test_user)
+
+        # Try to get other user's details
+        response = client.get(f"{settings.API_V1_STR}/users/email/{other_user['email']}")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json()["detail"] == "Not authorized to access this user's details"
+
 
 class TestUserAdmin:
     """Test cases for admin user management endpoints"""

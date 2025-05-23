@@ -1,0 +1,14 @@
+# stack 
+- python
+- FastAPI
+- Uvicorn
+- Redis
+- docker
+- msgpack
+- pytest
+
+# Environment
+The system is running in docker
+No sweeping changes.
+Make code precise, modular, testable.
+Every function should have at least two tests. One test for the success case and one test for error cases.
