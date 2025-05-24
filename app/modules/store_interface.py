@@ -305,7 +305,9 @@ class LocalStore(StoreProtocol):
 
     def get_by_email(self, email: str) -> Dict[str, str] | None:
         # Get UUID from email index
+        print(f"get_by_email email: {email}")
         uuid = self.email_index.get(email)
+        print(f"get_by_email uuid: {uuid}")
         if not uuid:
             return None
         # Get user data using UUID

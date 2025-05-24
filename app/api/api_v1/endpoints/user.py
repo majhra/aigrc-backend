@@ -513,7 +513,7 @@ async def get_user_by_id(
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     logger: TLogger = Depends(deps.get_logger),
     user_store: StoreProtocol = Depends(deps.get_user_store),
-    user_access: User = Depends(deps.owner_or_admin_for_user(deps.get_user))
+    user_access: User = Depends(deps.owner_or_admin_for_user(deps.lookup_user))
 ):
     """
     Get a specific user by UUID.
@@ -556,6 +556,7 @@ async def get_user_via_email(
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     logger: TLogger = Depends(deps.get_logger),
     user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_access: User = Depends(deps.owner_or_admin_for_user_by_email(deps.lookup_user_by_email))
 ):
     """
     Get a specific user by email.

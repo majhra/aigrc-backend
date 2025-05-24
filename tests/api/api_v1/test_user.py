@@ -1053,11 +1053,12 @@ class TestUser:
 
         # Mock current user for authentication
         app.dependency_overrides[deps.get_current_user] = lambda: test_user
+        app.dependency_overrides[deps.owner_or_admin_for_user_by_email] = lambda: User(**test_user)
 
         # Test getting non-existent user
         response = client.get(f"{settings.API_V1_STR}/user/users/email/nonexistent@example.com")
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.json()["detail"] == "User not found"
+        assert response.json()["detail"] == "Not found"
 
     def test_get_user_by_email_case_insensitive(self, request):
         """Test that email lookup is case insensitive"""
@@ -1089,6 +1090,7 @@ class TestUser:
 
         # Set up user store dependency after we have the test user
         app.dependency_overrides[deps.get_current_user] = lambda: User(**test_user)
+        app.dependency_overrides[deps.owner_or_admin_for_user_by_email] = lambda: User(**test_user)
 
         user_data = get_user_by_email(test_user['email'], user_store)
         assert user_data is not None, "Test user not found in store"

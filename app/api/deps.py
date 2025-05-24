@@ -128,14 +128,17 @@ async def get_current_user_safe(
 
     return user
 
-def get_user(user_id: str, user_store: StoreProtocol = Depends(get_user_store)):
+def lookup_user(user_id: str, user_store: StoreProtocol = Depends(get_user_store)):
     return user_store.get(user_id)
 
-def get_test(test_id: str, test_store: StoreProtocol = Depends(get_test_store)):
+def lookup_test(test_id: str, test_store: StoreProtocol = Depends(get_test_store)):
     return test_store.get(test_id)
 
-def get_execution(execution_id: str, execution_store: StoreProtocol = Depends(get_execution_store)):
+def lookup_execution(execution_id: str, execution_store: StoreProtocol = Depends(get_execution_store)):
     return execution_store.get(execution_id)
+
+def lookup_user_by_email(email: str, user_store: StoreProtocol = Depends(get_user_store)):
+    return user_store.get_by_email(email.lower())
 
 def owner_or_admin_for_user(
     resource_getter: callable,
@@ -147,11 +150,11 @@ def owner_or_admin_for_user(
     ):
         resource = resource_getter(user_id, user_store)
 
-        print(f"resource: {resource}")
-        print(f"current_user: {current_user}")
-        print(f"xxx: {user_id}")
         if not resource:
-            raise HTTPException(status_code=404, detail="Not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Not found"
+            )
 
         if hasattr(resource, "owner_id"):
             if resource.owner_id != str(current_user.id) and current_user.role != "admin":
@@ -161,4 +164,36 @@ def owner_or_admin_for_user(
                 raise HTTPException(status_code=403, detail="Access denied")
 
         return resource
+    return checker
+
+def owner_or_admin_for_user_by_email(
+    resource_getter: callable,
+):
+    async def checker(
+        email: str = Path(...),
+        current_user: User = Depends(get_current_user),
+        user_store: StoreProtocol = Depends(get_user_store),
+    ):
+        resource = resource_getter(email, user_store)
+        
+        print(f"resource: {resource}")
+        print(f"current_user: {current_user}")
+        print(f"xxx: {email}")
+        if resource is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Not found"
+            )
+            
+        if hasattr(resource, "owner_id"):
+            if resource.owner_id != str(current_user.id) and current_user.role != "admin":
+                raise HTTPException(status_code=403, detail="Access denied")
+        if str(current_user.id) == resource['id'] or current_user.role == "admin":
+            return resource
+            
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+        
     return checker
