@@ -67,6 +67,7 @@ class TestUser:
             "verification_code_expires_at": None,
             "password_reset_code": None,
             "password_reset_code_expires_at": None,
+            'role': None
         }
 
         assert response.status_code == status.HTTP_200_OK
@@ -572,6 +573,7 @@ class TestUser:
             "verification_code_expires_at": None,
             "password_reset_code": None,
             "password_reset_code_expires_at": None,
+            "role": "user"
         }
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == expected_response
@@ -1095,6 +1097,8 @@ class TestUser:
         data = response.json()
         assert data["email"] == user_data.email  # Should return original case
         assert data["id"] == str(user_data.id)
+        assert "password" not in data  
+        assert "password_reset_code" not in data 
 
     @pytest.mark.skip(reason="Authorization checks not implemented yet")
     def test_get_user_by_id_authorization(self, request):
