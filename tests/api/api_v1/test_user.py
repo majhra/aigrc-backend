@@ -1102,69 +1102,109 @@ class TestUser:
         assert "password" not in data  
         assert "password_reset_code" not in data 
 
-    @pytest.mark.skip(reason="Authorization checks not implemented yet")
-    def test_get_user_by_id_authorization(self, request):
-        """Test authorization for getting user by ID"""
+    def test_get_user_by_id_authorization_self_access(self, request):
+        """Test that a user can access their own data"""
         app = request.instance.app
         client = request.instance.client
         user_store = request.instance.user_store
 
-        # Get the existing test user from the fixture
-        test_user = User(
-            email="gorocoaico@gmail.com",
-            password=request.instance.valid_passwords[0],
-        )
-        user_data = get_user_by_email(test_user.email, user_store)
-        assert user_data is not None, "Test user not found in store"
-
-        # Create a second user for testing authorization
-        other_user = {
+        # Create a test user
+        test_user = {
             "id": str(uuid.uuid4()),
-            "email": "other@example.com",
+            "email": "test@example.com",
             "password": get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
         }
-        user_store.put(other_user["id"], other_user)
+        user_store.put(test_user["id"], test_user)
 
-        # Mock current user as test_user
+        # Mock current user as the test user
         app.dependency_overrides[deps.get_current_user] = lambda: User(**test_user)
+        app.dependency_overrides[deps.owner_or_admin_for_user] = lambda: User(**test_user)
 
-        # Try to get other user's details
-        response = client.get(f"{settings.API_V1_STR}/users/{other_user['id']}")
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert response.json()["detail"] == "Not authorized to access this user's details"
+        # Try to get own user details
+        response = client.get(f"{settings.API_V1_STR}/user/users/{test_user['id']}")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["id"] == test_user["id"]
+        assert data["email"] == test_user["email"]
 
-    @pytest.mark.skip(reason="Authorization checks not implemented yet")
-    def test_get_user_by_email_authorization(self, request):
-        """Test authorization for getting user by email"""
+    def test_get_user_by_id_authorization_other_user_denied(self, request):
+        """Test that a user cannot access another user's data"""
         app = request.instance.app
         client = request.instance.client
         user_store = request.instance.user_store
 
-        # Get the existing test user from the fixture
-        test_user = User(
-            email="gorocoaico@gmail.com",
-            password=request.instance.valid_passwords[0],
-        )
-        user_data = get_user_by_email(test_user.email, user_store)
-        assert user_data is not None, "Test user not found in store"
-
-        # Create a second user for testing authorization
-        other_user = {
+        # Create two test users
+        user1 = {
             "id": str(uuid.uuid4()),
-            "email": "other@example.com",
+            "email": "user1@example.com",
             "password": get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
         }
-        user_store.put(other_user["id"], other_user)
+        user2 = {
+            "id": str(uuid.uuid4()),
+            "email": "user2@example.com",
+            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "is_verified": True,
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+        }
+        user_store.put(user1["id"], user1)
+        user_store.put(user2["id"], user2)
 
-        # Mock current user as test_user
-        app.dependency_overrides[deps.get_current_user] = lambda: User(**test_user)
+        # Mock current user as user1
+        app.dependency_overrides[deps.get_current_user] = lambda: User(**user1)
+        # Mock owner_or_admin check to return user1 (not admin)
+        app.dependency_overrides[deps.owner_or_admin_for_user] = lambda: User(**user1)
 
-        # Try to get other user's details
-        response = client.get(f"{settings.API_V1_STR}/users/email/{other_user['email']}")
+        # Try to get user2's details
+        response = client.get(f"{settings.API_V1_STR}/user/users/{user2['id']}")
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert response.json()["detail"] == "Not authorized to access this user's details"
+        assert response.json()["detail"] == "Access denied"
+
+    def test_get_user_by_id_authorization_admin_access(self, request):
+        """Test that an admin user can access any user's data"""
+        app = request.instance.app
+        client = request.instance.client
+        user_store = request.instance.user_store
+
+        # Create a regular user
+        regular_user = {
+            "id": str(uuid.uuid4()),
+            "email": "regular@example.com",
+            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "is_verified": True,
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+        }
+        # Create an admin user
+        admin_user = {
+            "id": str(uuid.uuid4()),
+            "email": "admin@example.com",
+            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "is_verified": True,
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "role": "admin"  # Add admin role
+        }
+        user_store.put(regular_user["id"], regular_user)
+        user_store.put(admin_user["id"], admin_user)
+
+        # Mock current user as admin
+        app.dependency_overrides[deps.get_current_user] = lambda: User(**admin_user)
+        # Mock owner_or_admin check to return admin user
+        app.dependency_overrides[deps.owner_or_admin_for_user] = lambda: User(**admin_user)
+
+        # Try to get regular user's details
+        response = client.get(f"{settings.API_V1_STR}/user/users/{regular_user['id']}")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["id"] == regular_user["id"]
+        assert data["email"] == regular_user["email"]
 
 
 class TestUserAdmin:
