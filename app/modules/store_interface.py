@@ -210,7 +210,7 @@ class RedisStore(StoreProtocol):
         """Get user by email using the email index"""
         try:
             # Get UUID from email index
-            uuid_bytes = self.redis.hget(self.email_index_name, email)
+            uuid_bytes = self.redis.hget(self.email_index_name, email.lower())
             self.logger.info(f"Redis get by email called: {email} -> {uuid_bytes}")
             if not uuid_bytes:
                 return None
@@ -305,9 +305,7 @@ class LocalStore(StoreProtocol):
 
     def get_by_email(self, email: str) -> Dict[str, str] | None:
         # Get UUID from email index
-        print(f"get_by_email email: {email}")
-        uuid = self.email_index.get(email)
-        print(f"get_by_email uuid: {uuid}")
+        uuid = self.email_index.get(email.lower())
         if not uuid:
             return None
         # Get user data using UUID

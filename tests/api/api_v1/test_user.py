@@ -1433,3 +1433,240 @@ class TestUserAdmin:
         response = client.post(f"{settings.API_V1_STR}/user/users", json=new_user_data)
         assert response.status_code == 401
         assert response.json()["detail"] == "Not authenticated"
+
+    def test_update_user_success(self, request):
+        """Test successful user update by admin"""
+        client = request.instance.client
+        user_store = request.instance.user_store
+        force_equals = request.instance.force_equals
+
+        # Setup dependencies
+        request.instance.app.dependency_overrides[deps.get_user_store] = lambda: user_store
+        
+        # Create test user
+        user_id = uuid.uuid4()
+        password_plain_text = request.instance.valid_passwords[0]
+        user = {
+            "id": str(user_id),
+            "email": "gorocoaico+test_update_user_success@gmail.com",
+            "full_name": "Original Name",
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": None,
+            "is_verified": True,
+            "verification_code": None,
+            "verification_code_expires_at": None,
+        }
+        user_store.put(user["id"], user)
+
+        # Create admin user and get token
+        admin_user = {
+            "id": str(uuid.uuid4()),
+            "email": "admin@example.com",
+            "full_name": "Admin User",
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": None,
+            "is_verified": True,
+            "role": "admin"  # Admin role
+        }
+        user_store.put(admin_user["id"], admin_user)
+        
+        # Get admin token
+        admin_token = create_access_token(data={"sub": admin_user["email"]})
+        headers = {"Authorization": f"Bearer {admin_token}"}
+
+        # Update data
+        update_data = {
+            "full_name": "Updated Name",
+            "disabled": True
+        }
+
+        # Make request
+        response = client.put(
+            f"{settings.API_V1_STR}/user/users/{user_id}",
+            json=update_data,
+            headers=headers
+        )
+
+        # Verify response
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data["id"] == str(user_id)
+        assert response_data["email"] == user["email"]
+        assert response_data["full_name"] == "Updated Name"
+        assert response_data["disabled"] is False
+        assert response_data["is_verified"] is True
+
+    def test_update_user_not_found(self, request):
+        """Test updating non-existent user"""
+        client = request.instance.client
+        user_store = request.instance.user_store
+
+        # Setup dependencies
+        request.instance.app.dependency_overrides[deps.get_user_store] = lambda: user_store
+
+        # Create admin user and get token
+        admin_user = {
+            "id": str(uuid.uuid4()),
+            "email": "admin@example.com",
+            "full_name": "Admin User",
+            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": None,
+            "is_verified": True,
+            "role": "admin"
+        }
+        user_store.put(admin_user["id"], admin_user)
+        
+        # Get admin token
+        admin_token = create_access_token(data={"sub": admin_user["email"]})
+        headers = {"Authorization": f"Bearer {admin_token}"}
+
+        # Try to update non-existent user
+        non_existent_id = uuid.uuid4()
+        update_data = {"full_name": "New Name"}
+
+        response = client.put(
+            f"{settings.API_V1_STR}/user/users/{non_existent_id}",
+            json=update_data,
+            headers=headers
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json() == {"detail": "Not found"}
+
+    def test_update_user_unauthorized(self, request):
+        """Test updating user without authentication"""
+        client = request.instance.client
+        user_store = request.instance.user_store
+
+        # Setup dependencies
+        request.instance.app.dependency_overrides[deps.get_user_store] = lambda: user_store
+
+        # Create test user
+        user_id = uuid.uuid4()
+        user = {
+            "id": str(user_id),
+            "email": "gorocoaico+test_update_user_unauthorized@gmail.com",
+            "full_name": "Test User",
+            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": None,
+            "is_verified": True,
+        }
+        user_store.put(user["id"], user)
+
+        # Try to update without auth token
+        update_data = {"full_name": "New Name"}
+        response = client.put(
+            f"{settings.API_V1_STR}/user/users/{user_id}",
+            json=update_data
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.json() == {"detail": "Not authenticated"}
+
+    def test_update_user_password(self, request):
+        """Test updating user password"""
+        client = request.instance.client
+        user_store = request.instance.user_store
+
+        # Setup dependencies
+        request.instance.app.dependency_overrides[deps.get_user_store] = lambda: user_store
+
+        # Create test user
+        user_id = uuid.uuid4()
+        old_password = request.instance.valid_passwords[0]
+        user = {
+            "id": str(user_id),
+            "email": "gorocoaico+test_update_user_password@gmail.com",
+            "full_name": "Test User",
+            "password": get_password_hash(old_password),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": None,
+            "is_verified": True,
+            "role": "admin"
+        }
+        user_store.put(user["id"], user)
+        request.instance.app.dependency_overrides[deps.owner_or_admin_for_user] = lambda: User(**user)
+
+        # Get admin token
+        admin_token = create_access_token(data={"sub": user["email"]})
+        headers = {"Authorization": f"Bearer {admin_token}"}
+
+        # Update password
+        new_password = request.instance.valid_passwords[1]
+        update_data = {"password": new_password}
+
+        response = client.put(
+            f"{settings.API_V1_STR}/user/users/{user_id}",
+            json=update_data,
+            headers=headers
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        
+        # Verify password was updated by trying to login with new password
+        login_data = {
+            "username": user["email"],
+            "password": new_password
+        }
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        login_response = client.post(
+            f"{settings.API_V1_STR}/user/login",
+            data=login_data,
+            headers=login_headers
+        )
+        assert login_response.status_code == status.HTTP_200_OK
+
+    def test_update_user_self_access(self, request):
+        """Test user updating their own profile"""
+        client = request.instance.client
+        user_store = request.instance.user_store
+
+        # Setup dependencies
+        request.instance.app.dependency_overrides[deps.get_user_store] = lambda: user_store
+
+        # Create test user
+        user_id = uuid.uuid4()
+        password = request.instance.valid_passwords[0]
+        user = {
+            "id": str(user_id),
+            "email": "gorocoaico+test_update_user_self@gmail.com",
+            "full_name": "Original Name",
+            "password": get_password_hash(password),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": None,
+            "is_verified": True,
+        }
+        user_store.put(user["id"], user)
+
+        # Get user token
+        user_token = create_access_token(data={"sub": user["email"]})
+        headers = {"Authorization": f"Bearer {user_token}"}
+
+        # Update own profile
+        update_data = {
+            "full_name": "Updated Self Name",
+            "disabled": False  # Should not be able to change this
+        }
+
+        response = client.put(
+            f"{settings.API_V1_STR}/user/users/{user_id}",
+            json=update_data,
+            headers=headers
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data["id"] == str(user_id)
+        assert response_data["email"] == user["email"]
+        assert response_data["full_name"] == "Updated Self Name"
+        assert response_data["disabled"] is False  # Should remain unchanged

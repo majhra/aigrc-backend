@@ -176,9 +176,6 @@ def owner_or_admin_for_user_by_email(
     ):
         resource = resource_getter(email, user_store)
         
-        print(f"resource: {resource}")
-        print(f"current_user: {current_user}")
-        print(f"xxx: {email}")
         if resource is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

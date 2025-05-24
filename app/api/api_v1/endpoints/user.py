@@ -651,6 +651,7 @@ async def update_user(
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     logger: TLogger = Depends(deps.get_logger),
     user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_access: User = Depends(deps.owner_or_admin_for_user(deps.lookup_user))
 ):
     """
     Update a user's details (admin or self).
@@ -678,7 +679,8 @@ async def update_user(
         
         logger.info(f"Updated user: {user.email} with ID {user.id}")
         
-        return JSONResponse(content=UserResponse.model_validate(user).model_dump())
+        user_dict = user.model_dump()
+        return JSONResponse(content=UserResponse.model_validate(user_dict).model_dump(mode="json"))
     except HTTPException:
         raise
     except Exception as e:
