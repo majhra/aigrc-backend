@@ -67,7 +67,8 @@ class TestUser:
             "verification_code_expires_at": None,
             "password_reset_code": None,
             "password_reset_code_expires_at": None,
-            'role': None
+            'role': None,
+            'group': None
         }
 
         assert response.status_code == status.HTTP_200_OK
@@ -573,7 +574,8 @@ class TestUser:
             "verification_code_expires_at": None,
             "password_reset_code": None,
             "password_reset_code_expires_at": None,
-            "role": "user"
+            "role": None,
+            "group": None
         }
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == expected_response
@@ -991,7 +993,7 @@ class TestUser:
         # Test getting non-existent user
         response = client.get(f"{settings.API_V1_STR}/user/users/{uuid.uuid4()}")
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.json()["detail"] == "User not found"
+        assert response.json()["detail"] == "Not found"
 
     def test_get_user_by_email_success(self, request):
         """Test successful retrieval of user by email"""

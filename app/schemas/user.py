@@ -14,6 +14,51 @@ class Token(BaseModel):
     token_type: str
 
 
+class Group(BaseModel):
+    id: UUID4
+    name: str
+    description: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    status: Literal["ACTIVE", "INACTIVE", "SUSPENDED"] = "ACTIVE"
+    settings: dict | None = None
+
+    @field_validator("id", mode="before")
+    def set_id(cls, v):
+        if v is None:
+            return uuid.uuid4()
+        return v
+
+    @field_validator("name")
+    def validate_name(cls, name):
+        if not name or len(name.strip()) == 0:
+            raise ValueError("Group name cannot be empty")
+        return name.strip()
+
+
+class GroupCreate(BaseModel):
+    name: str
+    description: str | None = None
+    settings: dict | None = None
+
+
+class GroupUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    status: Literal["ACTIVE", "INACTIVE", "SUSPENDED"] | None = None
+    settings: dict | None = None
+
+
+class GroupResponse(BaseModel):
+    id: UUID4
+    name: str
+    description: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    status: Literal["ACTIVE", "INACTIVE", "SUSPENDED"]
+    settings: dict | None = None
+
+
 class UserResponse(BaseModel):
     id: UUID4
     email: str
@@ -133,48 +178,3 @@ class UserPasswordResetVerify:
     @field_validator("password_reset_code", mode="before")
     def validate_password_reset_code(cls, password_reset_code, **kwargs):
         return password_reset_code.upper().strip()
-
-
-class Group(BaseModel):
-    id: UUID4
-    name: str
-    description: str | None = None
-    created_at: datetime
-    updated_at: datetime
-    status: Literal["ACTIVE", "INACTIVE", "SUSPENDED"] = "ACTIVE"
-    settings: dict | None = None
-
-    @field_validator("id", mode="before")
-    def set_id(cls, v):
-        if v is None:
-            return uuid.uuid4()
-        return v
-
-    @field_validator("name")
-    def validate_name(cls, name):
-        if not name or len(name.strip()) == 0:
-            raise ValueError("Group name cannot be empty")
-        return name.strip()
-
-
-class GroupCreate(BaseModel):
-    name: str
-    description: str | None = None
-    settings: dict | None = None
-
-
-class GroupUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    status: Literal["ACTIVE", "INACTIVE", "SUSPENDED"] | None = None
-    settings: dict | None = None
-
-
-class GroupResponse(BaseModel):
-    id: UUID4
-    name: str
-    description: str | None = None
-    created_at: datetime
-    updated_at: datetime
-    status: Literal["ACTIVE", "INACTIVE", "SUSPENDED"]
-    settings: dict | None = None

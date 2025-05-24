@@ -513,6 +513,7 @@ async def get_user_by_id(
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     logger: TLogger = Depends(deps.get_logger),
     user_store: StoreProtocol = Depends(deps.get_user_store),
+    _: User = Depends(deps.owner_or_admin_for_user(deps.get_user))
 ):
     """
     Get a specific user by UUID.
