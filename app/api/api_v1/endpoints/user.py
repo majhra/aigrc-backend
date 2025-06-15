@@ -178,7 +178,6 @@ async def verify_email(
 
     # Check if user exists
     user = user_store.get_by_email(email)
-    logger.info(f"verify_email user: {user}")
     if user is None:
         logger.error(f"User with email {email} does not exist")
         raise HTTPException(
@@ -194,7 +193,7 @@ async def verify_email(
 
     # Check if verification code matches
     if user.verification_code != verification_code:
-        logger.error(f"Verification code does not match for user with email {email} - {user.verification_code} != {verification_code}")
+        logger.error(f"Verification code does not match for user with email {email} - entered: {verification_code}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Verification code does not match",
@@ -516,12 +515,33 @@ Email: {current_user.email}
     return JSONResponse(content={"message": "Support request sent"})
 
 
-@router.get("/me", response_model=User)
+@router.get("/me", response_model=UserResponse)
 async def read_user_me(
-    current_user: Annotated[User, Depends(deps.get_current_active_user)]
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    group_store: GroupStore = Depends(deps.get_group_store),
 ):
-    # BaseModel returns a string, rather than a dict
-    return JSONResponse(content=current_user.model_dump(mode="json"))
+    """
+    Get current user's profile information.
+    """
+    # Fetch group data if user has a group
+    group_response = None
+    if current_user.group:
+        group_data = group_store.get(current_user.group)
+        if group_data:
+            group_response = GroupResponse.model_validate(group_data.model_dump())
+    
+    # Create UserResponse with proper group data, excluding sensitive fields
+    user_response = UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        created_at=current_user.created_at or datetime.now(timezone.utc),
+        is_verified=current_user.is_verified or False,
+        disabled=current_user.disabled or False,
+        group=group_response
+    )
+    
+    return JSONResponse(content=user_response.model_dump(mode="json"))
 
 
 @router.get("/me/items")
