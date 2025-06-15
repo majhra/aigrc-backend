@@ -160,8 +160,31 @@ async def create_user(
     # Logging
     logger.info(f"User created: {user.model_dump_json()}")
 
-    # Return user
-    return JSONResponse(content=json.loads(user.model_dump_json()))
+    # Fetch group data for the response
+    group_response = None
+    if user.group:
+        group_data = group_store.get(user.group)
+        if group_data:
+            group_response = GroupResponse.model_validate(group_data.model_dump())
+    
+    # Create UserResponse with proper group data, excluding sensitive fields
+    user_response = UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        created_at=user.created_at or datetime.now(timezone.utc),
+        is_verified=user.is_verified or False,
+        disabled=user.disabled or False,
+        group=group_response
+    )
+    
+    # Return proper registration response
+    registration_response = RegistrationUserRepsonse(
+        message="User created successfully. Please check your email for verification.",
+        data=user_response
+    )
+    
+    return registration_response
 
 
 @router.post("/verify_email")
@@ -541,7 +564,7 @@ async def read_user_me(
         group=group_response
     )
     
-    return JSONResponse(content=user_response.model_dump(mode="json"))
+    return user_response
 
 
 @router.get("/me/items")
@@ -549,6 +572,59 @@ async def read_own_items(
     current_user: Annotated[User, Depends(deps.get_current_active_user)]
 ):
     return JSONResponse(content=[{"item_id": "Foo", "owner": current_user.email}])
+
+
+@router.get("/users/email/{email}", response_model=UserResponse)
+async def get_user_via_email(
+    email: str,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    logger: TLogger = Depends(deps.get_logger),
+    user_store: UserStore = Depends(deps.get_user_store),
+    group_store: GroupStore = Depends(deps.get_group_store),
+    user_access: User = Depends(deps.owner_or_admin_for_user_by_email(deps.lookup_user_by_email))
+):
+    """
+    Get a specific user by email.
+    """
+    try:
+        # Get user by email using the email index
+        user_data = user_store.get_by_email(email)
+        
+        if user_data is None:
+            logger.info(f"User not found: {email}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+            
+        # Fetch group data if user has a group
+        group_response = None
+        if user_data.group:
+            group_data = group_store.get(user_data.group)
+            if group_data:
+                group_response = GroupResponse.model_validate(group_data.model_dump())
+            
+        # Convert user data to UserResponse model, ensuring UUID is converted to string
+        user_response = UserResponse(
+            id=str(user_data.id),  # Convert UUID to string
+            email=user_data.email,
+            full_name=user_data.full_name,
+            created_at=user_data.created_at or datetime.now(timezone.utc),
+            is_verified=user_data.is_verified or False,
+            disabled=user_data.disabled or False,
+            group=group_response
+        )
+            
+        # TODO: Add authorization check (admin or self)
+        return JSONResponse(content=user_response.model_dump(mode="json"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving user {email}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error retrieving user"
+        )
 
 
 @router.get("/users", response_model=List[UserResponse])
@@ -647,59 +723,6 @@ async def get_user_by_id(
         raise
     except Exception as e:
         logger.error(f"Error retrieving user {user_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error retrieving user"
-        )
-
-
-@router.get("/users/email/{email}", response_model=UserResponse)
-async def get_user_via_email(
-    email: str,
-    current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    logger: TLogger = Depends(deps.get_logger),
-    user_store: UserStore = Depends(deps.get_user_store),
-    group_store: GroupStore = Depends(deps.get_group_store),
-    user_access: User = Depends(deps.owner_or_admin_for_user_by_email(deps.lookup_user_by_email))
-):
-    """
-    Get a specific user by email.
-    """
-    try:
-        # Get user by email using the email index
-        user_data = user_store.get_by_email(email)
-        
-        if user_data is None:
-            logger.info(f"User not found: {email}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
-            
-        # Fetch group data if user has a group
-        group_response = None
-        if user_data.group:
-            group_data = group_store.get(user_data.group)
-            if group_data:
-                group_response = GroupResponse.model_validate(group_data.model_dump())
-            
-        # Convert user data to UserResponse model, ensuring UUID is converted to string
-        user_response = UserResponse(
-            id=str(user_data.id),  # Convert UUID to string
-            email=user_data.email,
-            full_name=user_data.full_name,
-            created_at=user_data.created_at or datetime.now(timezone.utc),
-            is_verified=user_data.is_verified or False,
-            disabled=user_data.disabled or False,
-            group=group_response
-        )
-            
-        # TODO: Add authorization check (admin or self)
-        return JSONResponse(content=user_response.model_dump(mode="json"))
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error retrieving user {email}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error retrieving user"

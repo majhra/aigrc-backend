@@ -58,21 +58,14 @@ class TestUser:
             'id': self.uuid_matcher,
             "email": "gorocoaico+test_signup_success@gmail.com",
             "full_name": None,
-            "password": force_equals,
             "disabled": False,
             "created_at": force_equals,
-            "last_login": None,
             "is_verified": False,
-            "verification_code": None,
-            "verification_code_expires_at": None,
-            "password_reset_code": None,
-            "password_reset_code_expires_at": None,
-            'role': None,
             'group': force_equals
         }
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.json() == expected_response
+        assert response.json()['data'] == expected_response
 
     def test_signup_user_already_exists(self, request):
         user_store = request.instance.user_store
@@ -562,29 +555,32 @@ class TestUser:
     def test_me_success(self, request):
         app = request.instance.app
         client = request.instance.client
+        group_store = request.instance.group_store
 
-        app.dependency_overrides[deps.get_current_user] = lambda: User(
+        # Mock the current active user
+        test_user = User(
+            id=uuid.uuid4(),
             email="gorocoaico@gmail.com",
-            password=request.instance.valid_passwords[0],
+            full_name="Test User",
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+            group="test_group"
         )
+        
+        app.dependency_overrides[deps.get_current_active_user] = lambda: test_user
+        app.dependency_overrides[deps.get_group_store] = lambda: group_store
 
         response = client.get(f"{settings.API_V1_STR}/user/me")
 
         expected_response = {
-            'id': None,  
+            'id': str(test_user.id),
             "email": "gorocoaico@gmail.com",
-            "full_name": None,
-            "password": request.instance.valid_passwords[0],
-            "disabled": None,
-            "created_at": None,
-            "last_login": None,
-            "is_verified": None,
-            "verification_code": None,
-            "verification_code_expires_at": None,
-            "password_reset_code": None,
-            "password_reset_code_expires_at": None,
-            "role": None,
-            "group": None
+            "full_name": "Test User",
+            "created_at": test_user.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "is_verified": True,
+            "disabled": False,
+            "group": None  # No group data in test
         }
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == expected_response
@@ -602,7 +598,7 @@ class TestUser:
         app = request.instance.app
         client = request.instance.client
 
-        app.dependency_overrides[deps.get_current_user] = lambda: User(
+        app.dependency_overrides[deps.get_current_active_user] = lambda: User(
             email="gorocoaico@gmail.com",
             password=request.instance.valid_passwords[0],
         )
