@@ -64,6 +64,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: str | None = None
     created_at: datetime
+    last_login: datetime | None = None
     is_verified: bool
     disabled: bool
     group: GroupResponse | None = None

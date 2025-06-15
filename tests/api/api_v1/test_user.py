@@ -60,6 +60,7 @@ class TestUser:
             "full_name": None,
             "disabled": False,
             "created_at": force_equals,
+            "last_login": None,
             "is_verified": False,
             'group': force_equals
         }
@@ -564,6 +565,7 @@ class TestUser:
             full_name="Test User",
             disabled=False,
             created_at=datetime.now(timezone.utc),
+            last_login=datetime.now(timezone.utc),
             is_verified=True,
             group="test_group"
         )
@@ -578,6 +580,7 @@ class TestUser:
             "email": "gorocoaico@gmail.com",
             "full_name": "Test User",
             "created_at": test_user.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "last_login": test_user.last_login.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "is_verified": True,
             "disabled": False,
             "group": None  # No group data in test

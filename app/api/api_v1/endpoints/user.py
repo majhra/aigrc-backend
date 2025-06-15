@@ -173,6 +173,7 @@ async def create_user(
         email=user.email,
         full_name=user.full_name,
         created_at=user.created_at or datetime.now(timezone.utc),
+        last_login=user.last_login,
         is_verified=user.is_verified or False,
         disabled=user.disabled or False,
         group=group_response
@@ -559,6 +560,7 @@ async def read_user_me(
         email=current_user.email,
         full_name=current_user.full_name,
         created_at=current_user.created_at or datetime.now(timezone.utc),
+        last_login=current_user.last_login,
         is_verified=current_user.is_verified or False,
         disabled=current_user.disabled or False,
         group=group_response
@@ -610,6 +612,7 @@ async def get_user_via_email(
             email=user_data.email,
             full_name=user_data.full_name,
             created_at=user_data.created_at or datetime.now(timezone.utc),
+            last_login=user_data.last_login,
             is_verified=user_data.is_verified or False,
             disabled=user_data.disabled or False,
             group=group_response
@@ -661,6 +664,7 @@ async def list_users(
                 email=user.email,
                 full_name=user.full_name,
                 created_at=user.created_at or datetime.now(timezone.utc),
+                last_login=user.last_login,
                 is_verified=user.is_verified or False,
                 disabled=user.disabled or False,
                 group=group_response
@@ -712,6 +716,7 @@ async def get_user_by_id(
             email=user_data.email,
             full_name=user_data.full_name,
             created_at=user_data.created_at or datetime.now(timezone.utc),
+            last_login=user_data.last_login,
             is_verified=user_data.is_verified or False,
             disabled=user_data.disabled or False,
             group=group_response
@@ -799,6 +804,7 @@ async def create_user_admin(
             email=user.email,
             full_name=user.full_name,
             created_at=user.created_at or datetime.now(timezone.utc),
+            last_login=user.last_login,
             is_verified=user.is_verified or False,
             disabled=user.disabled or False,
             group=group_response
@@ -865,6 +871,7 @@ async def update_user(
             email=user.email,
             full_name=user.full_name,
             created_at=user.created_at or datetime.now(timezone.utc),
+            last_login=user.last_login,
             is_verified=user.is_verified or False,
             disabled=user.disabled or False,
             group=group_response
