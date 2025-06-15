@@ -40,7 +40,7 @@ def get_group_store(logger: TLogger = Depends(get_logger)) -> GroupStore:
     return GroupStore(redis_store)
 
 
-def get_test_store(logger: TLogger = Depends(get_logger)) -> StoreProtocol:
+def get_test_store(logger: TLogger = Depends(get_logger)) -> MyTestStore:
     """
     Get the redis store for tests.
     """
@@ -213,4 +213,33 @@ def owner_or_admin_for_user_by_email(
             detail="Access denied"
         )
         
+    return checker
+
+def owner_or_admin_for_test(
+    resource_getter: callable,
+):
+    async def checker(
+        test_id: str = Path(...),
+        current_user: User = Depends(get_current_user),
+        test_store: StoreProtocol = Depends(get_test_store),
+    ):
+        resource = resource_getter(test_id, test_store)
+
+        if not resource:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Test not found"
+            )
+
+        # Check if user is admin or belongs to the same group as the test
+        if current_user.role == "admin":
+            return resource
+            
+        if resource.group_id == current_user.group:
+            return resource
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Test does not belong to your group"
+        )
     return checker

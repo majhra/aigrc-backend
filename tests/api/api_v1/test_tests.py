@@ -8,7 +8,10 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.modules.tests_store import MyTestStore
 from app.modules.executions_store import ExecutedTestStore
-from app.schemas import MyTestCreate, User, ExecutedTestCreate
+from app.modules.user_store import UserStore
+from app.modules.group_store import GroupStore
+from app.modules.store_interface import LocalStore
+from app.schemas import MyTestCreate, User, ExecutedTestCreate, ConnectionConfig, ValidationConfig, ValidationCriterion, GroupCreate
 
 from app.api import deps
 from app.core.config import settings
@@ -16,35 +19,28 @@ from app.core.config import settings
 
 class TestTests:
     # Test data
-    TEST_USER = User(
-        id=uuid4(),
-        email="test@example.com",
-        is_active=True,
-        is_superuser=False
-    )
-
     TEST_DATA = MyTestCreate(
         name="Test AI Response",
         description="Test the AI's response to a simple prompt",
         prompt_template="What is 2+2?",
         interface_type="DIRECT_LLM",
-        connection_config={
-            "endpoint": "https://api.openai.com/v1/chat/completions",
-            "auth_type": "API_KEY",
-            "timeout": 30
-        },
-        validation_config={
-            "validator_type": "HUMAN",
-            "validation_criteria": [
-                {
-                    "id": "accuracy",
-                    "name": "Accuracy Check",
-                    "description": "Verify the answer is correct",
-                    "type": "EXACT_MATCH",
-                    "parameters": {"expected": "4"}
-                }
+        connection_config=ConnectionConfig(
+            endpoint="https://api.openai.com/v1/chat/completions",
+            auth_type="API_KEY",
+            timeout=30
+        ),
+        validation_config=ValidationConfig(
+            validator_type="HUMAN",
+            validation_criteria=[
+                ValidationCriterion(
+                    id="accuracy",
+                    name="Accuracy Check",
+                    description="Verify the answer is correct",
+                    type="EXACT_MATCH",
+                    parameters={"expected": "4"}
+                )
             ]
-        },
+        ),
         tags=["math", "basic"],
         risk_level="LOW",
         status="ACTIVE"
@@ -53,20 +49,46 @@ class TestTests:
     def setup_method(self, method):
         """Setup test environment before each test"""
         self.client = TestClient(app)
-        self.test_store = MyTestStore()
-        self.execution_store = ExecutedTestStore()
-        #self.test_store.clear()  # Clear any existing tests
+        self.test_store = MyTestStore(LocalStore())
+        self.execution_store = ExecutedTestStore(LocalStore())
+        self.user_store = UserStore(LocalStore())
+        self.group_store = GroupStore(LocalStore())
+        
+        # Create a test group
+        group_data = GroupCreate(name="Test Group", description="Test group for tests")
+        self.test_group = self.group_store.create(group_data, "system")
+        
+        # Create a test user with the group
+        self.TEST_USER = User(
+            id=uuid4(),
+            email="test@example.com",
+            full_name="Test User",
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+            group=str(self.test_group.id)
+        )
+        
+        # Store the user
+        self.user_store.create(self.TEST_USER, str(self.test_group.id))
 
-        # Override both the current user dependency and the test store dependency
+        # Override dependencies
         self.client.app.dependency_overrides[deps.get_current_active_user] = lambda: self.TEST_USER
         self.client.app.dependency_overrides[deps.get_test_store] = lambda: self.test_store
         self.client.app.dependency_overrides[deps.get_execution_store] = lambda: self.execution_store
+        self.client.app.dependency_overrides[deps.get_user_store] = lambda: self.user_store
+        self.client.app.dependency_overrides[deps.get_group_store] = lambda: self.group_store
 
     def teardown_method(self, method):
         """Clean up after each test"""
         self.client.app.dependency_overrides = {}
         self.test_store.clear()
         self.execution_store.clear()
+        # Clear user and group stores
+        if isinstance(self.user_store._store, LocalStore):
+            self.user_store._store.data.clear()
+        if isinstance(self.group_store._store, LocalStore):
+            self.group_store._store.data.clear()
 
     def test_create_test(self):
         """Test creating a new test"""
@@ -776,6 +798,7 @@ class TestTests:
             f"{settings.API_V1_STR}/tests",
             json=self.TEST_DATA.model_dump()
         )
+        print(create_response.json())
         test_id = create_response.json()["id"]
 
         execution_data = ExecutedTestCreate(

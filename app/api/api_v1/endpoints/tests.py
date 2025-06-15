@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from app.api import deps
 from app.core.config import settings
 from app.modules.store_interface import StoreProtocol, RedisStore
+from app.modules.tests_store import MyTestStore
 from app.schemas import TestSchema, MyTestCreate, TestList, User
 from app.schemas.executions import (
     ExecutedTestCreate, 
@@ -15,7 +16,6 @@ from app.schemas.executions import (
     ExecutedTestList,
     ValidationEvent
 )
-from app.modules.tests_store import MyTestStore
 from app.modules.executions_store import ExecutedTestStore
 
 router = APIRouter()
@@ -32,7 +32,7 @@ class TestWithExecutions(BaseModel):
 @router.get("", response_model=TestList)
 async def list_tests(
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(deps.get_test_store),
+    test_store: MyTestStore = Depends(deps.get_test_store),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     status: Optional[str] = Query(None, pattern="^(DRAFT|ACTIVE|ARCHIVED)$"),
@@ -42,13 +42,23 @@ async def list_tests(
 ) -> TestList:
     """
     List all tests with pagination and filtering.
+    Users can only see tests from their own group unless they are admin.
     """
+    # Filter tests by user's group unless user is admin
+    group_filter = None
+    if current_user.role != "admin":
+        group_filter = current_user.group
+        # If user has no group, they can see tests with no group_id (legacy tests)
+        if not group_filter:
+            group_filter = "default"
+    
     tests, total = test_store.list(
         page=page,
         limit=limit,
         status=status,
         risk_level=risk_level,
-        search=search
+        search=search,
+        group_id=group_filter
     )
     
     return TestList(
@@ -62,12 +72,13 @@ async def list_tests(
 async def get_test(
     test_id: UUID,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(deps.get_test_store),
+    test_store: MyTestStore = Depends(deps.get_test_store),
     execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> TestWithExecutions:
     """
     Get test details by ID along with associated execution IDs.
+    Users can only access tests from their own group unless they are admin.
     """
     logger.info(f"Getting test with ID: {test_id}")
     test = test_store.get(str(test_id))
@@ -75,6 +86,13 @@ async def get_test(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Test not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and test.group_id != current_user.group:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Test does not belong to your group"
         )
     
     # Get execution IDs for this test
@@ -91,7 +109,7 @@ async def get_test(
 async def create_test(
     test: MyTestCreate,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(deps.get_test_store),
+    test_store: MyTestStore = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> TestSchema:
     """
@@ -104,12 +122,28 @@ async def update_test(
     test_id: UUID,
     test: MyTestCreate,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(deps.get_test_store),
+    test_store: MyTestStore = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> TestSchema:
     """
     Update an existing test.
+    Users can only update tests from their own group unless they are admin.
     """
+    # Get the test and check ownership
+    existing_test = test_store.get(str(test_id))
+    if not existing_test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and existing_test.group_id != current_user.group:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Test does not belong to your group"
+        )
+    
     updated_test = test_store.update(str(test_id), test)
     if not updated_test:
         raise HTTPException(
@@ -122,12 +156,28 @@ async def update_test(
 async def delete_test(
     test_id: UUID,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(deps.get_test_store),
+    test_store: MyTestStore = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> None:
     """
     Delete a test.
+    Users can only delete tests from their own group unless they are admin.
     """
+    # Get the test and check ownership
+    existing_test = test_store.get(str(test_id))
+    if not existing_test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and existing_test.group_id != current_user.group:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Test does not belong to your group"
+        )
+    
     if not test_store.delete(str(test_id)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -139,20 +189,28 @@ async def execute_test(
     test_id: UUID,
     execution: ExecutedTestCreate,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(deps.get_test_store),
+    test_store: MyTestStore = Depends(deps.get_test_store),
     execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> ExecutedTestSchema:
     """
     Execute a test with the given input variables.
     Creates a new execution record and establishes the test-execution relationship.
+    Users can only execute tests from their own group unless they are admin.
     """
-    # Get the test
+    # Get the test and check ownership
     test = test_store.get(str(test_id))
     if not test:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Test not found"
+        )
+
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and test.group_id != current_user.group:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Test does not belong to your group"
         )
 
     # Check if test is active
@@ -258,7 +316,7 @@ async def validate_execution(
     execution_id: UUID,
     validation: ValidationEvent,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(deps.get_test_store),
+    test_store: MyTestStore = Depends(deps.get_test_store),
     execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> ExecutedTestSchema:
@@ -331,20 +389,28 @@ async def validate_execution(
     execution_id: UUID,
     validation: ValidationEvent,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(deps.get_test_store),
+    test_store: MyTestStore = Depends(deps.get_test_store),
     execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> ExecutedTestSchema:
     """
     Add a new validation to an existing test execution.
     The execution must exist and belong to the specified test.
+    Users can only validate executions for tests from their own group unless they are admin.
     """
-    # Get the test
+    # Get the test and check ownership
     test = test_store.get(str(test_id))
     if not test:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Test not found"
+        )
+
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and test.group_id != current_user.group:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Test does not belong to your group"
         )
 
     # Verify the execution exists and belongs to this test
@@ -394,7 +460,7 @@ async def get_test_execution(
     test_id: UUID,
     execution_id: UUID,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: StoreProtocol = Depends(deps.get_test_store),
+    test_store: MyTestStore = Depends(deps.get_test_store),
     execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> TestExecutionDetail:
@@ -403,14 +469,22 @@ async def get_test_execution(
     - The test details
     - The execution record
     - All validations for this execution
+    Users can only access executions for tests from their own group unless they are admin.
     """
-    # Get the test
+    # Get the test and check ownership
     test = test_store.get(str(test_id))
     if not test:
         logger.warning(f"Test {test_id} not found")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Test not found"
+        )
+
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and test.group_id != current_user.group:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Test does not belong to your group"
         )
 
     # Verify the execution exists and belongs to this test

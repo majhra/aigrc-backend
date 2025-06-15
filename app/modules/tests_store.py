@@ -13,7 +13,15 @@ class MyTestStore:
         data = self._store.get(test_id)
         if not data:
             return None
-        return TestSchema(**data)
+        
+        # Handle missing group_id field in existing data
+        if 'group_id' not in data:
+            data['group_id'] = None
+        
+        try:
+            return TestSchema(**data)
+        except Exception as e:
+            return None
 
     def list(
         self,
@@ -22,6 +30,7 @@ class MyTestStore:
         status: Optional[str] = None,
         risk_level: Optional[str] = None,
         search: Optional[str] = None,
+        group_id: Optional[str] = None,
     ) -> tuple[List[TestSchema], int]:
         # Get all keys
         keys = self._store.keys()
@@ -34,7 +43,6 @@ class MyTestStore:
             tests = [self.get(key) for key in keys]
             tests = [t for t in tests if t is not None]  # Filter out None values
         except Exception as e:
-            print(f"error: {e}")
             return [], 0
 
         # Apply filters
@@ -42,6 +50,10 @@ class MyTestStore:
             tests = [t for t in tests if t.status == status]
         if risk_level:
             tests = [t for t in tests if t.risk_level == risk_level]
+        if group_id:  # Filter by group ownership
+            # Handle None group_id values - treat them as belonging to a default group
+            # Convert both group_id values to strings for comparison
+            tests = [t for t in tests if (t.group_id is None and group_id == "default") or str(t.group_id) == str(group_id)]
         if search:
             search_lower = search.lower()
             tests = [
@@ -66,6 +78,7 @@ class MyTestStore:
         new_test = TestSchema(
             id=test_id,
             created_by=user.id,
+            group_id=user.group,
             created_at=now,
             updated_at=now,
             **test.model_dump()
@@ -85,6 +98,7 @@ class MyTestStore:
         updated_test = TestSchema(
             id=test_id,
             created_by=existing_test.created_by,
+            group_id=existing_test.group_id,
             created_at=existing_test.created_at,
             updated_at=now,
             **test.model_dump()
@@ -96,6 +110,19 @@ class MyTestStore:
     def delete(self, test_id: str) -> bool:
         data = self._store.pop(test_id)
         return data is not None
+
+    def belongs_to_group(self, test_id: str, group_id: str) -> bool:
+        """Check if a test belongs to a specific group."""
+        test = self.get(test_id)
+        if not test:
+            return False
+        return str(test.group_id) == str(group_id)
+
+    def get_tests_by_group(self, group_id: str) -> List[TestSchema]:
+        """Get all tests belonging to a specific group."""
+        tests, _ = self.list(group_id=group_id, page=1, limit=1000)  # Get all tests for the group
+        return tests
+
 
     def clear(self) -> None:
         """Clear all tests from the store. Used for testing."""

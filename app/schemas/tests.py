@@ -1,5 +1,5 @@
-from typing import Literal, List, Optional
-from pydantic import BaseModel, UUID4, Field
+from typing import Literal, List, Optional, Union
+from pydantic import BaseModel, UUID4, Field, field_validator
 from datetime import datetime
 from uuid import UUID
 
@@ -46,6 +46,7 @@ class ValidationCriterion(BaseModel):
 class ValidationConfig(BaseModel):
     validator_type: str = Field(..., pattern="^(HUMAN|AI|RULE_BASED|HYBRID)$")
     validation_criteria: List[ValidationCriterion]
+
 class MyTestCreate(BaseModel):
     name: str
     description: str | None = None
@@ -63,10 +64,18 @@ class TestUpdate(MyTestCreate):
 class TestSchema(MyTestCreate):
     id: UUID
     created_by: UUID
+    group_id: Optional[Union[str, UUID]] = None  # Owner of the test, optional for backward compatibility
     created_at: datetime
     updated_at: datetime
     lastRun_at: Optional[datetime] = None
     latest_execution_id: Optional[UUID] = None
+
+    @field_validator('group_id', mode='before')
+    @classmethod
+    def convert_group_id_to_string(cls, v):
+        if v is None:
+            return None
+        return str(v)
 
 class TestList(BaseModel):
     items: List[TestSchema]
