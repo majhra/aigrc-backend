@@ -35,7 +35,8 @@ class TestPromptsCategories:
             is_verified=True,
             disabled=False
         )
-        self.user_store.put(str(test_user.id), test_user.model_dump())
+        # Use the underlying store to put the user directly
+        self.user_store._store.put(str(test_user.id), test_user.model_dump())
 
         # Override the current user dependency in the Auth: current_user: Annotated[User, Depends(deps.get_current_active_user)] dependency
     

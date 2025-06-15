@@ -110,6 +110,12 @@ class User(BaseModel):
             return None
         return utils.format_email(email)
 
+    @field_validator("group", mode="before")
+    def ensure_group_is_string(cls, group, **kwargs):
+        if group is None:
+            return None
+        return str(group)
+
 
 class UserInDB(User):
     password: str

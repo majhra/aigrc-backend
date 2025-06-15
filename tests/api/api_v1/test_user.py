@@ -68,7 +68,7 @@ class TestUser:
             "password_reset_code": None,
             "password_reset_code_expires_at": None,
             'role': None,
-            'group': None
+            'group': force_equals
         }
 
         assert response.status_code == status.HTTP_200_OK
@@ -96,8 +96,9 @@ class TestUser:
             "verification_code_expires_at": (
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         data = {"email": user["email"], "password": password_plain_text}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -190,8 +191,10 @@ class TestUser:
             "is_verified": True,
             "verification_code": None,
             "verification_code_expires_at": None,
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
+
 
         data = {"username": user["email"], "password": password_plain_text}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -225,8 +228,9 @@ class TestUser:
             "verification_code_expires_at": (
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         data = {"username": user["email"], "password": password_plain_text}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -282,8 +286,9 @@ class TestUser:
             "verification_code_expires_at": (
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         data = {"email": user["email"], "verification_code": user["verification_code"]}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -319,8 +324,9 @@ class TestUser:
             "verification_code_expires_at": (
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         data = {"email": user["email"], "verification_code": "INVALID"}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -354,8 +360,9 @@ class TestUser:
             "verification_code_expires_at": (
                 datetime.now() - timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         data = {"email": user["email"], "verification_code": user["verification_code"]}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -387,8 +394,9 @@ class TestUser:
             "is_verified": True,
             "verification_code": None,
             "verification_code_expires_at": None,
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         data = {"email": user["email"], "verification_code": "FGD69G"}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -443,8 +451,9 @@ class TestUser:
             "verification_code_expires_at": (
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         data = {"email": user["email"]}
         response = client.post(
@@ -635,19 +644,18 @@ class TestUser:
             "is_verified": True,
             "verification_code": None,
             "verification_code_expires_at": None,
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
-        # Mock current user so we are authenticated
-        app.dependency_overrides[deps.get_current_user] = lambda: User(
-            email=user["email"], password=user["password"]
-        )
+        # Mock current user so we are authenticated - use the complete user object
+        app.dependency_overrides[deps.get_current_active_user] = lambda: User(**user)
 
         # Update profile
         data = {"full_name": "John Doe"}
-        response = client.post("/api/v1.0/user/update_profile", params=data)
+        response = client.post(f"{settings.API_V1_STR}/user/update_profile", params=data)
 
-        expected_response = {"message": "Profile updated"}
+        expected_response = {"message": "Profile updated successfully"}
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == expected_response
 
@@ -655,7 +663,7 @@ class TestUser:
         client = request.instance.client
 
         data = {"full_name": "John Doe"}
-        response = client.post("/api/v1.0/user/update_profile", params=data)
+        response = client.post(f"{settings.API_V1_STR}/user/update_profile", params=data)
 
         expected_response = {"detail": "Not authenticated"}
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -685,8 +693,9 @@ class TestUser:
             "is_verified": True,
             "verification_code": None,
             "verification_code_expires_at": None,
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         # Call password reset request endpoint
         data = {"email": user["email"]}
@@ -743,8 +752,9 @@ class TestUser:
             "is_verified": False,
             "verification_code": None,
             "verification_code_expires_at": None,
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         # Call password reset request endpoint
         data = {"email": user["email"]}
@@ -781,8 +791,9 @@ class TestUser:
             "password_reset_code_expires_at": (
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         # Call password reset verify endpoint
         data = {
@@ -852,8 +863,9 @@ class TestUser:
             "password_reset_code_expires_at": (
                 datetime.now() + timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         # Call password reset verify endpoint
         data = {
@@ -897,8 +909,9 @@ class TestUser:
             "password_reset_code_expires_at": (
                 datetime.now() - timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         # Call password reset verify endpoint
         data = {
@@ -943,15 +956,14 @@ class TestUser:
             "password_reset_code_expires_at": (
                 datetime.now() - timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-
-        # Store the user and verify it was stored
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
         
         # Verify user exists in store
-        stored_user = user_store.get(user["id"])
+        stored_user = user_store.get(user["group"], user["id"])
         assert stored_user is not None, f"User not found in store with ID {user['id']}"
-        assert stored_user["id"] == user["id"], f"Stored user ID {stored_user['id']} doesn't match {user['id']}"
+        assert str(stored_user.id) == user["id"], f"Stored user ID {stored_user.id} doesn't match {user['id']}"
         
         # Get user by email to verify email index
         user_data = get_user_by_email(user['email'], user_store)
@@ -963,7 +975,7 @@ class TestUser:
 
         # Test getting user by ID
         print(f"\nDebug: Attempting to get user with ID {user['id']}")
-        print(f"Debug: User store contains: {list(user_store.keys())}")
+        print(f"Debug: User store contains: {list(user_store.list())}")
         
         response = client.get(f"{settings.API_V1_STR}/user/users/{user['id']}")
         print(f"Debug: Response status: {response.status_code}")
@@ -1006,7 +1018,7 @@ class TestUser:
 
         password_plain_text = request.instance.valid_passwords[0]
         password_reset_code = "FGD69G"
-        test_user = {
+        user = {
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_get_user_by_email_success@gmail.com",
             "full_name": None,
@@ -1021,15 +1033,14 @@ class TestUser:
             "password_reset_code_expires_at": (
                 datetime.now() - timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-
-        # Store the user and verify it was stored
-        user_store.put(test_user["id"], test_user)
-        user_data = get_user_by_email(test_user['email'], user_store)
+        user_store.create(User(**user), user['group'])
+        user_data = get_user_by_email(user['email'], user_store)
         assert user_data is not None, "Test user not found in store"
 
         # Mock current user for authentication - use User model instance
-        app.dependency_overrides[deps.get_current_user] = lambda: User(**test_user)
+        app.dependency_overrides[deps.get_current_user] = lambda: User(**user)
 
         # Test getting user by email
         response = client.get(f"{settings.API_V1_STR}/user/users/email/{user_data.email}")
@@ -1068,7 +1079,7 @@ class TestUser:
 
         password_plain_text = request.instance.valid_passwords[0]
         password_reset_code = "FGD69G"
-        test_user = {
+        user = {
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_get_user_by_email_case_insensitive@gmail.com",
             "full_name": None,
@@ -1083,16 +1094,15 @@ class TestUser:
             "password_reset_code_expires_at": (
                 datetime.now() - timedelta(days=10)
             ).replace(tzinfo=timezone.utc),
+            "group":"test_group"
         }
-
-        # Store the user in the store first
-        user_store.put(test_user["id"], test_user)
+        user_store.create(User(**user), user['group'])
 
         # Set up user store dependency after we have the test user
-        app.dependency_overrides[deps.get_current_user] = lambda: User(**test_user)
+        app.dependency_overrides[deps.get_current_user] = lambda: User(**user)
         app.dependency_overrides[deps.owner_or_admin_for_user_by_email] = lambda: User(**test_user)
 
-        user_data = get_user_by_email(test_user['email'], user_store)
+        user_data = get_user_by_email(user['email'], user_store)
         assert user_data is not None, "Test user not found in store"
 
         # Test with uppercase email
@@ -1111,26 +1121,27 @@ class TestUser:
         user_store = request.instance.user_store
 
         # Create a test user
-        test_user = {
+        user = {
             "id": str(uuid.uuid4()),
             "email": "test@example.com",
             "password": get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
+            "group":"test_group"
         }
-        user_store.put(test_user["id"], test_user)
+        user_store.create(User(**user), user['group'])
 
         # Mock current user as the test user
-        app.dependency_overrides[deps.get_current_user] = lambda: User(**test_user)
-        app.dependency_overrides[deps.owner_or_admin_for_user] = lambda: User(**test_user)
+        app.dependency_overrides[deps.get_current_user] = lambda: User(**user)
+        app.dependency_overrides[deps.owner_or_admin_for_user] = lambda: User(**user)
 
         # Try to get own user details
-        response = client.get(f"{settings.API_V1_STR}/user/users/{test_user['id']}")
+        response = client.get(f"{settings.API_V1_STR}/user/users/{user['id']}")
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["id"] == test_user["id"]
-        assert data["email"] == test_user["email"]
+        assert data["id"] == user["id"]
+        assert data["email"] == user["email"]
 
     def test_get_user_by_id_authorization_other_user_denied(self, request):
         """Test that a user cannot access another user's data"""
@@ -1146,6 +1157,7 @@ class TestUser:
             "is_verified": True,
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
+            "group":"test_group"
         }
         user2 = {
             "id": str(uuid.uuid4()),
@@ -1154,9 +1166,11 @@ class TestUser:
             "is_verified": True,
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
+            "group":"test_group"
         }
-        user_store.put(user1["id"], user1)
-        user_store.put(user2["id"], user2)
+        user_store.create(User(**user1), user1['group'])
+        user_store.create(User(**user2), user2['group'])
+        
 
         # Mock current user as user1
         app.dependency_overrides[deps.get_current_user] = lambda: User(**user1)
@@ -1182,6 +1196,7 @@ class TestUser:
             "is_verified": True,
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
+            "group":"test_group"
         }
         # Create an admin user
         admin_user = {
@@ -1191,10 +1206,12 @@ class TestUser:
             "is_verified": True,
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
-            "role": "admin"  # Add admin role
+            "role": "admin",  # Add admin role
+            "group":"test_group"
         }
-        user_store.put(regular_user["id"], regular_user)
-        user_store.put(admin_user["id"], admin_user)
+        user_store.create(User(**admin_user), admin_user['group'])
+        user_store.create(User(**regular_user), regular_user['group'])
+
 
         # Mock current user as admin
         app.dependency_overrides[deps.get_current_user] = lambda: User(**admin_user)
@@ -1226,8 +1243,9 @@ class TestUserAdmin:
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
+            group="test_group"
         )
-        user_store.put(str(admin_user.id), admin_user.model_dump())
+        user_store.create(admin_user, admin_user.group)
         
         # Create test regular users
         test_users = []
@@ -1239,8 +1257,10 @@ class TestUserAdmin:
                 disabled=False,
                 created_at=datetime.now(timezone.utc),
                 is_verified=True,
+                group="test_group"
             )
-            user_store.put(str(user.id), user.model_dump())
+            user_store.create(user, user.group)
+
             test_users.append(user)
             
         # Get admin token
@@ -1252,7 +1272,7 @@ class TestUserAdmin:
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
-        assert len(data) == 3  # 3 test users
+        assert len(data) == 4  # 3 test users
         
         # Verify user data structure
         user = data[0]
@@ -1290,8 +1310,9 @@ class TestUserAdmin:
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
+            group="test_group"
         )
-        user_store.put(str(admin_user.id), admin_user.model_dump())
+        user_store.create(admin_user, admin_user.group)
         admin_token = create_access_token(data={"sub": admin_user.email})
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
         
@@ -1320,8 +1341,9 @@ class TestUserAdmin:
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
+            group="test_group"
         )
-        user_store.put(str(admin_user.id), admin_user.model_dump())
+        user_store.create(admin_user, admin_user.group)
         admin_token = create_access_token(data={"sub": admin_user.email})
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
         
@@ -1359,8 +1381,9 @@ class TestUserAdmin:
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
+            group="test_group"
         )
-        user_store.put(str(admin_user.id), admin_user.model_dump())
+        user_store.create(admin_user, admin_user.group)
         admin_token = create_access_token(data={"sub": admin_user.email})
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
         
@@ -1372,8 +1395,9 @@ class TestUserAdmin:
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
+            group="test_group"
         )
-        user_store.put(str(test_user.id), test_user.model_dump())
+        user_store.create(test_user, test_user.group)
         
         # Try to create user with same email
         new_user_data = {
@@ -1397,8 +1421,9 @@ class TestUserAdmin:
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
+            group="test_group"
         )
-        user_store.put(str(admin_user.id), admin_user.model_dump())
+        user_store.create(admin_user, admin_user.group)
         admin_token = create_access_token(data={"sub": admin_user.email})
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
         
@@ -1457,8 +1482,9 @@ class TestUserAdmin:
             "is_verified": True,
             "verification_code": None,
             "verification_code_expires_at": None,
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         # Create admin user and get token
         admin_user = {
@@ -1470,9 +1496,10 @@ class TestUserAdmin:
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
             "is_verified": True,
-            "role": "admin"  # Admin role
+            "role": "admin",
+            "group":"test_group"
         }
-        user_store.put(admin_user["id"], admin_user)
+        user_store.create(User(**admin_user), admin_user['group'])  
         
         # Get admin token
         admin_token = create_access_token(data={"sub": admin_user["email"]})
@@ -1518,9 +1545,10 @@ class TestUserAdmin:
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
             "is_verified": True,
-            "role": "admin"
+            "role": "admin",
+            "group":"test_group"
         }
-        user_store.put(admin_user["id"], admin_user)
+        user_store.create(User(**admin_user), admin_user['group'])
         
         # Get admin token
         admin_token = create_access_token(data={"sub": admin_user["email"]})
@@ -1558,8 +1586,9 @@ class TestUserAdmin:
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
             "is_verified": True,
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         # Try to update without auth token
         update_data = {"full_name": "New Name"}
@@ -1591,9 +1620,10 @@ class TestUserAdmin:
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
             "is_verified": True,
-            "role": "admin"
+            "role": "admin",
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
         request.instance.app.dependency_overrides[deps.owner_or_admin_for_user] = lambda: User(**user)
 
         # Get admin token
@@ -1645,8 +1675,9 @@ class TestUserAdmin:
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
             "is_verified": True,
+            "group":"test_group"
         }
-        user_store.put(user["id"], user)
+        user_store.create(User(**user), user['group'])
 
         # Get user token
         user_token = create_access_token(data={"sub": user["email"]})

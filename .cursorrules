@@ -8,7 +8,20 @@
 - pytest
 
 # Environment
-The system is running in docker
+The development environment is on windows.
+The system is running in docker.
 No sweeping changes.
 Make code precise, modular, testable.
 Every function should have at least two tests. One test for the success case and one test for error cases.
+Use 'python -m pytest' to run tests.
+
+
+# Code Style
+- avoid unnecessary explanations
+- Suggest alternative solutions
+- prioritize technical details over advice
+- Type Hinting: Strictly use the 'typing' module. All functions, methods, and class members must have type annotations.
+- Elegance and Readability: Strive for elegant and Pythonic code that is easy to understand and maintain.
+- Explicit over Implicit: Favor explicit code that clearly communicates its intent over implicit, overly concise code.
+- Reusable Components: Develop reusable functions and classes, favoring composition over inheritance.
+- Thorough Unit Testing: Aim for high test coverage (90% or higher) using `pytest`. Test both common cases and edge cases.

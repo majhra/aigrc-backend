@@ -6,16 +6,18 @@ from os.path import join
 from typing import Optional
 
 import shortuuid
-from jinja2 import Template
+from fastapi import HTTPException, status
 from jose import jwt
 from passlib.context import CryptContext
 from pydantic import AnyHttpUrl
+from jinja2 import Template
 from UnleashClient import UnleashClient
 
 from app.core.config import settings
 from app.modules.email_service import AWSEmailExecuter, EmailHTMLData, EmailService
 from app.modules.store_interface import StoreProtocol
 from app.modules.tlogger import TLogger
+from app.modules.user_store import UserStore
 from app.schemas import UserInDB
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -55,7 +57,7 @@ def get_logger() -> TLogger:
     return logger
 
 
-def get_user(username: str, user_store: StoreProtocol) -> Optional[UserInDB]:
+def get_user(username: str, user_store: UserStore) -> Optional[UserInDB]:
     """
     Get the user from the database.
     :param username: The username of the user to get.
@@ -63,14 +65,14 @@ def get_user(username: str, user_store: StoreProtocol) -> Optional[UserInDB]:
     :return: The user data.
     """
     try:
-        user_dict = user_store.get(username)
-        if user_dict:
-            return UserInDB(**user_dict)
+        user = user_store.get_by_id_only(username)
+        if user:
+            return UserInDB(**user.model_dump())
     except Exception as e:
         logger.error(f"Error getting user {username}: {e}")
         raise
 
-def get_user_by_email(username: str, user_store: StoreProtocol) -> Optional[UserInDB]:
+def get_user_by_email(username: str, user_store: UserStore) -> Optional[UserInDB]:
     """
     Get the user from the database.
     :param username: The username of the user to get.
@@ -78,14 +80,14 @@ def get_user_by_email(username: str, user_store: StoreProtocol) -> Optional[User
     :return: The user data.
     """
     try:
-        user_dict = user_store.get_by_email(username.lower())
-        if user_dict:
-            return UserInDB(**user_dict)
+        user = user_store.get_by_email(username.lower())
+        if user:
+            return UserInDB(**user.model_dump())
     except Exception as e:
         logger.error(f"Error getting user by email {username}: {e}")
         raise
 
-def get_user_uuid_by_email(email: str, user_store: StoreProtocol) -> str | None:
+def get_user_uuid_by_email(email: str, user_store: UserStore) -> str | None:
     """
     Get a user's UUID by their email address.
     
@@ -100,16 +102,16 @@ def get_user_uuid_by_email(email: str, user_store: StoreProtocol) -> str | None:
         Exception: If there is an error accessing the store
     """
     try:
-        user_dict = user_store.get_by_email(email.lower())
-        if user_dict:
-            return user_dict['id']
+        user = user_store.get_by_email(email.lower())
+        if user:
+            return str(user.id)
         return None
     except Exception as e:
         # Log the error and re-raise
         logger.error(f"Error looking up user UUID by email {email}: {str(e)}")
         raise
 
-def authenticate_user(username: str, password: str, user_store: StoreProtocol):
+def authenticate_user(username: str, password: str, user_store: UserStore):
     """
     Authenticate a user by email and password.
     
@@ -131,8 +133,8 @@ def authenticate_user(username: str, password: str, user_store: StoreProtocol):
     # Update last login time
     user.last_login = datetime.now(timezone.utc)
     
-    # Save user with UUID as key - email index is handled by the store
-    user_store.put(str(user.id), user.model_dump())
+    # Save user with group structure
+    user_store.update(user.group, str(user.id), user.model_dump())
     return user
 
 
@@ -197,7 +199,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 
 def send_verification_email(
     email: str,
-    user_store: StoreProtocol,
+    user_store: UserStore,
     verification_url: AnyHttpUrl = settings.VERIFICATION_URL,
 ):
     """
@@ -221,8 +223,8 @@ def send_verification_email(
     user.verification_code = verification_code
     user.verification_code_expires_at = verification_code_expires_at
 
-    # Save user record
-    user_store.put(str(user.id), user.model_dump())
+    # Save user record with group structure
+    user_store.update(user.group, str(user.id), user.model_dump())
 
     # Load email HTML template
     verification_url_with_params = (
@@ -254,7 +256,11 @@ def send_verification_email(
 
     # Send verification email
     email_data = EmailHTMLData(
-        **{"subject": "Welcome to AI GRC", "body": rendered_email, "to": [email]}
+        **{
+            "subject": "[AI GRC] Email Verification",
+            "body": rendered_email,
+            "to": [email],
+        }
     )
 
     if False:

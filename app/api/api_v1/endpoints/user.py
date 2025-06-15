@@ -32,6 +32,8 @@ from app.modules.email_service import (
 )
 from app.modules.store_interface import StoreProtocol
 from app.modules.tlogger import TLogger
+from app.modules.user_store import UserStore
+from app.modules.group_store import GroupStore
 from app.schemas import (
     RegistrationUserRepsonse,
     SupportRequest,
@@ -43,6 +45,7 @@ from app.schemas import (
     UserSignup,
     UserUpdate,
     UserResponse,
+    GroupResponse,
 )
 
 router = APIRouter()
@@ -55,7 +58,7 @@ DATA_DIR: str = join("app", "data")
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
 ):
     username = format_email(form_data.username)
     password = form_data.password
@@ -93,17 +96,29 @@ async def login_for_access_token(
 async def create_user(
     user_credentials: Annotated[UserSignup, Depends()],
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
+    group_store: GroupStore = Depends(deps.get_group_store),
 ):
     # Check if user already exists
     email = user_credentials.email
-    user = get_user_by_email(email, user_store)
+    logger.info(f"create_user called: {email}")
+    user = user_store.get_by_email(email)
+    logger.info(f"create_user finished: {email}")
 
     if user is not None:
         logger.error(f"Attempting to register existing user: {email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST
         )
+
+    # Create a new group for this user
+    from app.schemas import GroupCreate
+    group_data = GroupCreate(
+        name=f"Group for {email}",
+        description=f"Personal group for user {email}"
+    )
+    new_group = group_store.create(group_data, "system")
+    group_id = str(new_group.id)
 
     # Generate a standard UUID4
     user_id = uuid4()
@@ -115,10 +130,11 @@ async def create_user(
         disabled=False,
         created_at=datetime.now(timezone.utc),
         is_verified=False,
+        group=group_id,  # This is already a string from str(new_group.id)
     )
 
-    # Save user to database
-    user_store.put(str(user.id), user.model_dump())
+    # Save user to database with group structure
+    user_store.create(user, group_id)
 
     # Generate verification email
     try:
@@ -132,8 +148,9 @@ async def create_user(
         # Logging
         logger.error(f"Error sending verification email: {error_message}")
 
-        # Delete user record
-        user_store.pop(str(user.id))
+        # Delete user record and group
+        user_store.delete(group_id, str(user.id))
+        group_store.delete(group_id)
 
         # Return error
         raise HTTPException(
@@ -151,7 +168,7 @@ async def create_user(
 async def verify_email(
     varification_data: Annotated[UserEmailVerification, Depends()],
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
 ):
     email = varification_data.email.lower()
     verification_code = varification_data.verification_code.upper()
@@ -160,7 +177,8 @@ async def verify_email(
     logger.info(f"verify_email called: {email}")
 
     # Check if user exists
-    user = get_user_by_email(email, user_store)
+    user = user_store.get_by_email(email)
+    logger.info(f"verify_email user: {user}")
     if user is None:
         logger.error(f"User with email {email} does not exist")
         raise HTTPException(
@@ -176,7 +194,7 @@ async def verify_email(
 
     # Check if verification code matches
     if user.verification_code != verification_code:
-        logger.error(f"Verification code does not match for user with email {email}")
+        logger.error(f"Verification code does not match for user with email {email} - {user.verification_code} != {verification_code}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Verification code does not match",
@@ -200,8 +218,8 @@ async def verify_email(
     user.verification_code = None
     user.verification_code_expires_at = None
 
-    # Save user record
-    user_store.put(str(user.id), user.model_dump())
+    # Save updated user
+    user_store.update(user.group, str(user.id), user.model_dump())
 
     # Return a authentication token
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -215,23 +233,42 @@ async def verify_email(
 async def resend_verification_email(
     email: str,
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
 ):
-    email = email.lower()
-
-    # Logging
-    logger.info(f"resend_verification_email called: {email}")
-
     # Check if user exists
-    user = get_user_by_email(email, user_store)
+    user = user_store.get_by_email(email)
     if user is None:
         logger.error(f"User with email {email} does not exist")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Data"
         )
 
-    # Send verification email
-    send_verification_email(email, user_store, settings.VERIFICATION_URL)
+    # Check if user is already verified
+    if user.is_verified:
+        logger.error(f"User with email {email} is already verified")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Data"
+        )
+
+    # Generate verification email
+    try:
+        send_verification_email(user.email, user_store, settings.VERIFICATION_URL)
+        pass
+    except Exception as e:
+        error_message = str(e)
+        if hasattr(e, "message"):
+            error_message = e.message
+
+        # Logging
+        logger.error(f"Error sending verification email: {error_message}")
+
+        # Return error
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
+        )
+
+    # Logging
+    logger.info(f"Verification email resent: {user.email}")
 
     return JSONResponse(content={"message": "Verification email sent"})
 
@@ -240,17 +277,17 @@ async def resend_verification_email(
 async def password_reset_request(
     password_reset_request_data: Annotated[UserPasswordResetRequest, Depends()],
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
 ):
-    """
-    Sends a password reset email to the user.
-    """
     email = password_reset_request_data.email.lower()
 
+    # Logging
+    logger.info(f"password_reset_request called: {email}")
+
     # Check if user exists
-    user = get_user_by_email(email, user_store)
+    user = user_store.get_by_email(email)
     if user is None:
-        logger.info(f"User with email {email} does not exist")
+        logger.error(f"User with email {email} does not exist")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Data"
         )
@@ -263,14 +300,16 @@ async def password_reset_request(
         )
 
     # Update user record
-    user.password_reset_code = shortuuid.ShortUUID().random(length=6).upper()
+    password_reset_code = shortuuid.ShortUUID().random(length=6).upper()
+    user.password_reset_code = password_reset_code
     user.password_reset_code_expires_at = datetime.now(timezone.utc) + timedelta(
-        minutes=15
+        hours=14
     )
 
-    # Save user record
-    user_store.put(str(user.id), user.model_dump())
+    # Save updated user
+    user_store.update(user.group, str(user.id), user.model_dump())
 
+    # Generate password reset email
     # Generate URL with parameters
     password_reset_url_with_params = (
         str(settings.PASSWORD_RESET_URL)
@@ -279,6 +318,14 @@ async def password_reset_request(
             {"email": email, "password_reset_code": user.password_reset_code}
         )
     )
+    try:
+        # TODO: Implement password reset email sending
+        logger.info(f"Password reset code for {email}: {password_reset_code}")
+        pass
+    except Exception as e:
+        error_message = str(e)
+        if hasattr(e, "message"):
+            error_message = e.message
 
     # Load email HTML template
     email_dir = join(settings.ASSETS_DIR, "email_templates", "password_reset.html")
@@ -321,33 +368,39 @@ async def password_reset_request(
 async def password_reset_verify(
     form_data: Annotated[UserPasswordResetVerify, Depends()],
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
 ):
-    """
-    Changes the user's password if the password reset code is valid.
-    """
     email = form_data.email.lower()
-    new_password = form_data.new_password
     password_reset_code = form_data.password_reset_code.upper()
+    new_password = form_data.new_password
+
+    # Logging
+    logger.info(f"password_reset_verify called: {email}")
 
     # Check if user exists
-    user = get_user_by_email(email, user_store)
+    user = user_store.get_by_email(email)
     if user is None:
-        logger.info(f"User with email {email} does not exist")
+        logger.error(f"User with email {email} does not exist")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Data"
         )
 
     # Check if password reset code matches
     if user.password_reset_code != password_reset_code:
-        logger.info(f"Password reset code does not match for user with email {email}")
+        logger.error(f"Password reset code does not match for user with email {email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Data"
         )
 
     # Check if password reset code has expired
-    if user.password_reset_code_expires_at < datetime.now(timezone.utc):
-        logger.info(f"Password reset code has expired for user with email {email}")
+    try:
+        if user.password_reset_code_expires_at < datetime.now(timezone.utc):
+            logger.error(f"Password reset code has expired for user with email {email}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Data"
+            )
+    except Exception as e:
+        logger.error(f"Error checking password reset code expiration: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed Data"
         )
@@ -357,8 +410,8 @@ async def password_reset_verify(
     user.password_reset_code = None
     user.password_reset_code_expires_at = None
 
-    # Save user record
-    user_store.put(str(user.id), user.model_dump())
+    # Save updated user
+    user_store.update(user.group, str(user.id), user.model_dump())
 
     # Return an authentication token
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -375,17 +428,29 @@ async def update_profile(
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     user_update: UserUpdate = Depends(),
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
 ):
     # Update user record
-    for attr, value in user_update.__dict__.items():
-        if not attr.startswith("_") and attr != "email" and value is not None:
-            setattr(current_user, attr, value)
+    update_data = user_update.model_dump(exclude_unset=True)
+    
+    # Handle password hashing
+    if "password" in update_data and update_data["password"] is not None:
+        update_data["password"] = get_password_hash(update_data["password"])
+    
+    # Update user
+    logger.info(f"update_profile called: {current_user.email} - {update_data}")
+    updated_user = user_store.update(current_user.group, str(current_user.id), update_data)
+    
+    if not updated_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
 
-    # Save user record
-    user_store.put(str(current_user.id), current_user.model_dump())
+    # Logging
+    logger.info(f"Profile updated: {updated_user.email}")
 
-    return JSONResponse(content={"message": "Profile updated"})
+    return JSONResponse(content={"message": "Profile updated successfully"})
 
 
 @router.post("/support")
@@ -456,7 +521,8 @@ async def read_user_me(
     current_user: Annotated[User, Depends(deps.get_current_active_user)]
 ):
     # BaseModel returns a string, rather than a dict
-    return JSONResponse(content=json.loads(current_user.model_dump_json()))
+    return JSONResponse(content=current_user.model_dump(mode="json"))
+
 
 @router.get("/me/items")
 async def read_own_items(
@@ -471,7 +537,8 @@ async def list_users(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
+    group_store: GroupStore = Depends(deps.get_group_store),
 ):
     """
     List all users with pagination. Admin only.
@@ -479,27 +546,32 @@ async def list_users(
     # TODO: Add admin role check
     try:
         # Get all users from store
-        #users = user_store.get_all()
-
-        test_users = []
-        for i in range(3):
-            user = User(
-                id=str(uuid4()),
-                email=f"goricoaico+testuser{i}@gmail.com",
-                password=get_password_hash(f"UserPass{i}123!"),
-                disabled=False,
-                created_at=datetime.now(timezone.utc),
-                is_verified=True,
+        users, total = user_store.list(page=skip//limit + 1, limit=limit)
+        logger.info(f"list_users called: {users}")
+        
+        # Convert User models to UserResponse with proper group data
+        user_responses = []
+        for user in users:
+            # Fetch group data if user has a group
+            group_response = None
+            if user.group:
+                group_data = group_store.get(user.group)
+                if group_data:
+                    group_response = GroupResponse.model_validate(group_data.model_dump())
+            
+            # Create UserResponse with proper group data
+            user_response = UserResponse(
+                id=user.id,
+                email=user.email,
+                full_name=user.full_name,
+                created_at=user.created_at or datetime.now(timezone.utc),
+                is_verified=user.is_verified or False,
+                disabled=user.disabled or False,
+                group=group_response
             )
-            test_users.append(user)
-
-        # Apply pagination
-        paginated_users = test_users[skip : skip + limit]
-        # Convert User models to dictionaries and validate as UserResponse
-        return JSONResponse(content=[
-            UserResponse.model_validate(user.model_dump(mode="json")).model_dump(mode="json") 
-            for user in paginated_users
-        ])
+            user_responses.append(user_response.model_dump(mode="json"))
+        
+        return JSONResponse(content=user_responses)
     except Exception as e:
         logger.error(f"Error listing users: {str(e)}")
         raise HTTPException(
@@ -507,12 +579,14 @@ async def list_users(
             detail="Error retrieving users"
         )
 
+
 @router.get("/users/{user_id}", response_model=UserResponse)
 async def get_user_by_id(
     user_id: UUID,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
+    group_store: GroupStore = Depends(deps.get_group_store),
     user_access: User = Depends(deps.owner_or_admin_for_user(deps.lookup_user))
 ):
     """
@@ -520,7 +594,7 @@ async def get_user_by_id(
     """
     try:
         # Try to get user by UUID
-        user_data = get_user(str(user_id), user_store)
+        user_data = user_store.get_by_id_only(str(user_id))
         
         if user_data is None:
             logger.info(f"User not found: {user_id}")
@@ -529,6 +603,13 @@ async def get_user_by_id(
                 detail="User not found"
             )
             
+        # Fetch group data if user has a group
+        group_response = None
+        if user_data.group:
+            group_data = group_store.get(user_data.group)
+            if group_data:
+                group_response = GroupResponse.model_validate(group_data.model_dump())
+            
         # Convert user data to UserResponse model, ensuring UUID is converted to string
         user_response = UserResponse(
             id=str(user_data.id),  # Convert UUID to string
@@ -536,7 +617,8 @@ async def get_user_by_id(
             full_name=user_data.full_name,
             created_at=user_data.created_at or datetime.now(timezone.utc),
             is_verified=user_data.is_verified or False,
-            disabled=user_data.disabled or False
+            disabled=user_data.disabled or False,
+            group=group_response
         )
             
         # TODO: Add authorization check (admin or self)
@@ -550,12 +632,14 @@ async def get_user_by_id(
             detail="Error retrieving user"
         )
 
+
 @router.get("/users/email/{email}", response_model=UserResponse)
 async def get_user_via_email(
     email: str,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
+    group_store: GroupStore = Depends(deps.get_group_store),
     user_access: User = Depends(deps.owner_or_admin_for_user_by_email(deps.lookup_user_by_email))
 ):
     """
@@ -563,7 +647,7 @@ async def get_user_via_email(
     """
     try:
         # Get user by email using the email index
-        user_data = get_user_by_email(email, user_store)
+        user_data = user_store.get_by_email(email)
         
         if user_data is None:
             logger.info(f"User not found: {email}")
@@ -572,6 +656,13 @@ async def get_user_via_email(
                 detail="User not found"
             )
             
+        # Fetch group data if user has a group
+        group_response = None
+        if user_data.group:
+            group_data = group_store.get(user_data.group)
+            if group_data:
+                group_response = GroupResponse.model_validate(group_data.model_dump())
+            
         # Convert user data to UserResponse model, ensuring UUID is converted to string
         user_response = UserResponse(
             id=str(user_data.id),  # Convert UUID to string
@@ -579,7 +670,8 @@ async def get_user_via_email(
             full_name=user_data.full_name,
             created_at=user_data.created_at or datetime.now(timezone.utc),
             is_verified=user_data.is_verified or False,
-            disabled=user_data.disabled or False
+            disabled=user_data.disabled or False,
+            group=group_response
         )
             
         # TODO: Add authorization check (admin or self)
@@ -593,26 +685,44 @@ async def get_user_via_email(
             detail="Error retrieving user"
         )
 
+
 @router.post("/users", response_model=UserResponse)
 async def create_user_admin(
     user_data: UserSignup,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
+    group_store: GroupStore = Depends(deps.get_group_store),
 ):
     """
     Create a new user (admin only).
     This is separate from the registration endpoint as it's for admin use.
     """
     # TODO: Add admin role check
+    # TODO: group limits. 
     try:
         # Check if user already exists using email index
-        existing_user = get_user_by_email(user_data.email, user_store)
+        existing_user = user_store.get_by_email(user_data.email)
         if existing_user is not None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User already exists"
             )
+
+        # For now, use default group
+        # TODO: Allow specifying group in admin user creation
+        default_group_id = "default"
+        
+        # Check if default group exists, create if not
+        default_group = group_store.get(default_group_id)
+        if not default_group:
+            from app.schemas import GroupCreate
+            group_data = GroupCreate(
+                name="Default Group",
+                description="Default group for new users"
+            )
+            default_group = group_store.create(group_data, "system")
+            default_group_id = str(default_group.id)
 
         # Generate a standard UUID4
         user_id = uuid4()
@@ -625,16 +735,33 @@ async def create_user_admin(
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "is_verified": True,  # Admin-created users are pre-verified
+            "group": default_group_id,
         })
 
-        # Store user with UUID as key - email index is handled by the store
-        user_store.put(str(user.id), user.model_dump())
+        # Store user with group structure
+        user_store.create(user, default_group_id)
         
         logger.info(f"Admin created user: {user.email} with ID {user.id}")
         
-        # Convert User model to dict and validate as UserResponse
-        user_dict = user.model_dump()
-        return JSONResponse(content=UserResponse.model_validate(user_dict).model_dump(mode="json"))
+        # Fetch group data for the response
+        group_response = None
+        if user.group:
+            group_data = group_store.get(user.group)
+            if group_data:
+                group_response = GroupResponse.model_validate(group_data.model_dump())
+        
+        # Create UserResponse with proper group data
+        user_response = UserResponse(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            created_at=user.created_at or datetime.now(timezone.utc),
+            is_verified=user.is_verified or False,
+            disabled=user.disabled or False,
+            group=group_response
+        )
+        
+        return JSONResponse(content=user_response.model_dump(mode="json"))
     except HTTPException:
         raise
     except Exception as e:
@@ -644,20 +771,22 @@ async def create_user_admin(
             detail="Error creating user"
         )
 
+
 @router.put("/users/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: UUID,
     user_update: UserUpdate,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     logger: TLogger = Depends(deps.get_logger),
-    user_store: StoreProtocol = Depends(deps.get_user_store),
+    user_store: UserStore = Depends(deps.get_user_store),
+    group_store: GroupStore = Depends(deps.get_group_store),
     user_access: User = Depends(deps.owner_or_admin_for_user(deps.lookup_user))
 ):
     """
     Update a user's details (admin or self).
     """
     try:
-        user_data = get_user(str(user_id), user_store)
+        user_data = user_store.get_by_id_only(str(user_id))
         if user_data is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -669,18 +798,36 @@ async def update_user(
         # TODO: Add authorization check (admin or self)
         
         # Update user fields
-        for field, value in user_update.model_dump(exclude_unset=True).items():
+        update_data = user_update.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
             if field == "password" and value is not None:
                 value = get_password_hash(value)
             setattr(user, field, value)
 
-        # Update user - email index is handled by the store
-        user_store.put(str(user.id), user.model_dump())
+        # Update user with group structure
+        user_store.update(user.group, str(user.id), user.model_dump())
         
         logger.info(f"Updated user: {user.email} with ID {user.id}")
         
-        user_dict = user.model_dump()
-        return JSONResponse(content=UserResponse.model_validate(user_dict).model_dump(mode="json"))
+        # Fetch group data if user has a group
+        group_response = None
+        if user.group:
+            group_data = group_store.get(user.group)
+            if group_data:
+                group_response = GroupResponse.model_validate(group_data.model_dump())
+        
+        # Create UserResponse with proper group data
+        user_response = UserResponse(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            created_at=user.created_at or datetime.now(timezone.utc),
+            is_verified=user.is_verified or False,
+            disabled=user.disabled or False,
+            group=group_response
+        )
+        
+        return JSONResponse(content=user_response.model_dump(mode="json"))
     except HTTPException:
         raise
     except Exception as e:

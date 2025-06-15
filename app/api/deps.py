@@ -12,19 +12,33 @@ from app.modules.tests_store import MyTestStore
 from app.modules.tlogger import TLogger
 from app.schemas import TokenData, User
 from app.modules.executions_store import ExecutedTestStore
+from app.modules.user_store import UserStore
+from app.modules.group_store import GroupStore
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/user/login", auto_error=False
 )
 
 
-def get_user_store(logger: TLogger = Depends(get_logger)) -> StoreProtocol:
+def get_user_store(logger: TLogger = Depends(get_logger)) -> UserStore:
     """
-    Get the redis store for users.
+    Get the user store with group-based structure.
     """
-    return RedisStore(
+    redis_store = RedisStore(
         logger, "user", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
     )
+    return UserStore(redis_store)
+
+
+def get_group_store(logger: TLogger = Depends(get_logger)) -> GroupStore:
+    """
+    Get the group store.
+    """
+    redis_store = RedisStore(
+        logger, "group", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
+    )
+    return GroupStore(redis_store)
+
 
 def get_test_store(logger: TLogger = Depends(get_logger)) -> StoreProtocol:
     """
@@ -45,7 +59,7 @@ def get_execution_store(logger: TLogger = Depends(get_logger)) -> ExecutedTestSt
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
-    user_store: StoreProtocol = Depends(get_user_store),
+    user_store: UserStore = Depends(get_user_store),
     logger: TLogger = Depends(get_logger),
 ):
     """
@@ -78,7 +92,8 @@ async def get_current_user(
     except JWTError as e:
         logger.error(f"JWTError: {e}")
         raise credentials_exception
-    user = get_user_by_email(token_data.email, user_store)
+    
+    user = user_store.get_by_email(token_data.email)
     logger.info(
         f"username : {user.full_name}, email: {user.email}, id: {user.id}, disabled: {user.disabled}"
     )
@@ -100,7 +115,7 @@ async def get_current_active_user(
 
 async def get_current_user_safe(
     token: Annotated[str, Depends(oauth2_scheme)],
-    user_store: StoreProtocol = Depends(get_user_store),
+    user_store: UserStore = Depends(get_user_store),
     logger: TLogger = Depends(get_logger),
 ) -> Optional[User]:
     if token is None:
@@ -120,7 +135,7 @@ async def get_current_user_safe(
     except:
         return None
 
-    user = get_user_by_email(token_data.email, user_store)
+    user = user_store.get_by_email(token_data.email)
 
     logger.info(
         f"user : {user.full_name}, email: {user.email}, disabled: {user.disabled}"
@@ -128,8 +143,13 @@ async def get_current_user_safe(
 
     return user
 
-def lookup_user(user_id: str, user_store: StoreProtocol = Depends(get_user_store)):
-    return user_store.get(user_id)
+def lookup_user(user_id: str, user_store: UserStore = Depends(get_user_store)):
+    """Lookup user by ID across all groups."""
+    return user_store.get_by_id_only(user_id)
+
+def lookup_user_by_group_and_id(group_id: str, user_id: str, user_store: UserStore = Depends(get_user_store)):
+    """Lookup user by group ID and user ID."""
+    return user_store.get(group_id, user_id)
 
 def lookup_test(test_id: str, test_store: StoreProtocol = Depends(get_test_store)):
     return test_store.get(test_id)
@@ -137,7 +157,7 @@ def lookup_test(test_id: str, test_store: StoreProtocol = Depends(get_test_store
 def lookup_execution(execution_id: str, execution_store: StoreProtocol = Depends(get_execution_store)):
     return execution_store.get(execution_id)
 
-def lookup_user_by_email(email: str, user_store: StoreProtocol = Depends(get_user_store)):
+def lookup_user_by_email(email: str, user_store: UserStore = Depends(get_user_store)):
     return user_store.get_by_email(email.lower())
 
 def owner_or_admin_for_user(
@@ -146,7 +166,7 @@ def owner_or_admin_for_user(
     async def checker(
         user_id: str = Path(...),
         current_user: User = Depends(get_current_user),
-        user_store: StoreProtocol = Depends(get_user_store),
+        user_store: UserStore = Depends(get_user_store),
     ):
         resource = resource_getter(user_id, user_store)
 
@@ -160,7 +180,7 @@ def owner_or_admin_for_user(
             if resource.owner_id != str(current_user.id) and current_user.role != "admin":
                 raise HTTPException(status_code=403, detail="Access denied")
         else:
-            if resource['id'] != str(current_user.id) and current_user.role != "admin":
+            if str(resource.id) != str(current_user.id) and current_user.role != "admin":
                 raise HTTPException(status_code=403, detail="Access denied")
 
         return resource
@@ -172,7 +192,7 @@ def owner_or_admin_for_user_by_email(
     async def checker(
         email: str = Path(...),
         current_user: User = Depends(get_current_user),
-        user_store: StoreProtocol = Depends(get_user_store),
+        user_store: UserStore = Depends(get_user_store),
     ):
         resource = resource_getter(email, user_store)
         
@@ -185,7 +205,7 @@ def owner_or_admin_for_user_by_email(
         if hasattr(resource, "owner_id"):
             if resource.owner_id != str(current_user.id) and current_user.role != "admin":
                 raise HTTPException(status_code=403, detail="Access denied")
-        if str(current_user.id) == resource['id'] or current_user.role == "admin":
+        if str(current_user.id) == str(resource.id) or current_user.role == "admin":
             return resource
             
         raise HTTPException(

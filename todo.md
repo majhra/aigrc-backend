@@ -14,3 +14,6 @@
 [ ] - copy test to draft.
 [ ] - security around the test init. Server side, how to ensure the requester is also the owner of the target chatbot, else it's a security exploit (ddos etc). On the browser, handle CORS. Handle logins. 
 [ ] - Validate user lookup has access to view user details
+[ ] - User and group check on login - ensure they match else bail.
+[ ] - user_store.keys is going to be a problem as it returns all keys. Limit/search instead?
+[ ] - /users endpoint inclides password and verification code. Redact
