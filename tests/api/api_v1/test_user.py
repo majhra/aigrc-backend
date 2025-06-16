@@ -553,6 +553,284 @@ class TestUser:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.json() == expected_response
 
+    @patch("app.api.api_v1.endpoints.user.send_invite_email")
+    def test_invite_user_success(self, mock_send_invite_email, request):
+        user_store = request.instance.user_store
+        group_store = request.instance.group_store
+        client = request.instance.client
+
+        request.instance.app.dependency_overrides[deps.get_user_store] = (
+            lambda: user_store
+        )
+        request.instance.app.dependency_overrides[deps.get_group_store] = (
+            lambda: group_store
+        )
+
+        # Create a group first
+        from app.schemas import GroupCreate
+        group_data = GroupCreate(
+            name="Test Team",
+            description="Test team for invites"
+        )
+        group = group_store.create(group_data, "system")
+        group_id = str(group.id)
+
+        # Create the inviter user
+        password_plain_text = request.instance.valid_passwords[0]
+        inviter_user = {
+            "id": str(uuid.uuid4()),
+            "email": "inviter@example.com",
+            "full_name": "John Inviter",
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": None,
+            "last_login": None,
+            "is_verified": True,
+            "group": group_id
+        }
+        user_store.create(User(**inviter_user), group_id)
+
+        # Login to get token
+        login_data = {"username": inviter_user["email"], "password": password_plain_text}
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        login_response = client.post(
+            f"{settings.API_V1_STR}/user/login", data=login_data, headers=login_headers
+        )
+        token = login_response.json()["access_token"]
+
+        # Mock the invite email function
+        mock_send_invite_email.return_value = "INVITE123"
+
+        # Send invite
+        invite_data = {"email": "newuser@example.com"}
+        invite_headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Bearer {token}"
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/user/invite", data=invite_data, headers=invite_headers
+        )
+
+        expected_response = {
+            "message": "Invitation sent successfully",
+            "email": "newuser@example.com"
+        }
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == expected_response
+
+        # Verify the invite email was called with correct parameters
+        mock_send_invite_email.assert_called_once_with(
+            email="newuser@example.com",
+            inviter_name="John Inviter",
+            group_id=group_id,
+            invite_url=settings.INVITE_URL
+        )
+
+
+    def test_invite_user_unauthorized(self, request):
+        client = request.instance.client
+
+        invite_data = {"email": "newuser@example.com"}
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        response = client.post(
+            f"{settings.API_V1_STR}/user/invite", data=invite_data, headers=headers
+        )
+
+        expected_response = {"detail": "Not authenticated"}
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.json() == expected_response
+
+
+    def test_invite_user_already_exists(self, request):
+        user_store = request.instance.user_store
+        group_store = request.instance.group_store
+        client = request.instance.client
+
+        request.instance.app.dependency_overrides[deps.get_user_store] = (
+            lambda: user_store
+        )
+        request.instance.app.dependency_overrides[deps.get_group_store] = (
+            lambda: group_store
+        )
+
+        # Create a group first
+        from app.schemas import GroupCreate
+        group_data = GroupCreate(
+            name="Test Team",
+            description="Test team for invites"
+        )
+        group = group_store.create(group_data, "system")
+        group_id = str(group.id)
+
+        # Create the inviter user
+        password_plain_text = request.instance.valid_passwords[0]
+        inviter_user = {
+            "id": str(uuid.uuid4()),
+            "email": "inviter@example.com",
+            "full_name": "John Inviter",
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": None,
+            "last_login": None,
+            "is_verified": True,
+            "group": group_id
+        }
+        user_store.create(User(**inviter_user), group_id)
+
+        # Create the user to be invited (already exists)
+        existing_user = {
+            "id": str(uuid.uuid4()),
+            "email": "existing@example.com",
+            "full_name": None,
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": None,
+            "last_login": None,
+            "is_verified": True,
+            "group": group_id
+        }
+        user_store.create(User(**existing_user), group_id)
+
+        # Login to get token
+        login_data = {"username": inviter_user["email"], "password": password_plain_text}
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        login_response = client.post(
+            f"{settings.API_V1_STR}/user/login", data=login_data, headers=login_headers
+        )
+        token = login_response.json()["access_token"]
+
+        # Try to invite existing user
+        invite_data = {"email": "existing@example.com"}
+        invite_headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Bearer {token}"
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/user/invite", data=invite_data, headers=invite_headers
+        )
+
+        expected_response = {"detail": "User already exists"}
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == expected_response
+
+
+    def test_invite_user_no_group(self, request):
+        user_store = request.instance.user_store
+        client = request.instance.client
+
+        request.instance.app.dependency_overrides[deps.get_user_store] = (
+            lambda: user_store
+        )
+
+        # Create user without group
+        password_plain_text = request.instance.valid_passwords[0]
+        user_without_group = {
+            "id": str(uuid.uuid4()),
+            "email": "nogroup@example.com",
+            "full_name": "No Group User",
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": None,
+            "last_login": None,
+            "is_verified": True,
+            "group": None
+        }
+        # Create user without a group by using a temporary group that won't be validated
+        user_store.create(User(**user_without_group), "temp_group")
+        
+        # Manually update the user to have no group
+        user_without_group["group"] = None
+        user_store.update("temp_group", str(user_without_group["id"]), user_without_group)
+
+        # Login to get token
+        login_data = {"username": user_without_group["email"], "password": password_plain_text}
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        login_response = client.post(
+            f"{settings.API_V1_STR}/user/login", data=login_data, headers=login_headers
+        )
+        token = login_response.json()["access_token"]
+
+        # Try to invite without group
+        invite_data = {"email": "newuser@example.com"}
+        invite_headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Bearer {token}"
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/user/invite", data=invite_data, headers=invite_headers
+        )
+
+        expected_response = {"detail": "You must be part of a team to send invites"}
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == expected_response
+
+
+    @patch("app.api.api_v1.endpoints.user.send_invite_email")
+    def test_invite_user_email_failed_to_send(self, mock_send_invite_email, request):
+        user_store = request.instance.user_store
+        group_store = request.instance.group_store
+        client = request.instance.client
+
+        request.instance.app.dependency_overrides[deps.get_user_store] = (
+            lambda: user_store
+        )
+        request.instance.app.dependency_overrides[deps.get_group_store] = (
+            lambda: group_store
+        )
+
+        # Create a group first
+        from app.schemas import GroupCreate
+        group_data = GroupCreate(
+            name="Test Team",
+            description="Test team for invites"
+        )
+        group = group_store.create(group_data, "system")
+        group_id = str(group.id)
+
+        # Create the inviter user
+        password_plain_text = request.instance.valid_passwords[0]
+        inviter_user = {
+            "id": str(uuid.uuid4()),
+            "email": "inviter@example.com",
+            "full_name": "John Inviter",
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": None,
+            "last_login": None,
+            "is_verified": True,
+            "group": group_id
+        }
+        user_store.create(User(**inviter_user), group_id)
+
+        # Login to get token
+        login_data = {"username": inviter_user["email"], "password": password_plain_text}
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        login_response = client.post(
+            f"{settings.API_V1_STR}/user/login", data=login_data, headers=login_headers
+        )
+        token = login_response.json()["access_token"]
+
+        # Mock the invite email function to fail
+        error_message = "Failed to send invite email"
+        email_exception = Exception(error_message)
+        email_exception.message = error_message
+        mock_send_invite_email.side_effect = email_exception
+
+        # Try to send invite
+        invite_data = {"email": "newuser@example.com"}
+        invite_headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Bearer {token}"
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/user/invite", data=invite_data, headers=invite_headers
+        )
+
+        expected_response = {"detail": "Failed to send invitation email"}
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == expected_response
+
+
     def test_me_success(self, request):
         app = request.instance.app
         client = request.instance.client

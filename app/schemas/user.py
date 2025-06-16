@@ -192,3 +192,12 @@ class UserPasswordResetVerify:
     @field_validator("password_reset_code", mode="before")
     def validate_password_reset_code(cls, password_reset_code, **kwargs):
         return password_reset_code.upper().strip()
+
+
+@dataclass
+class UserInvite:
+    email: Annotated[EmailStr, Form()]
+
+    @field_validator("email", mode="before")
+    def lowercase_and_strip_email(cls, email, **kwargs):
+        return utils.format_email(email)

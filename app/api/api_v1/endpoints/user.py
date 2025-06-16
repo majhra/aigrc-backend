@@ -22,6 +22,7 @@ from app.api.utils import (
     get_user_by_email,
     send_verification_email,
     get_user_uuid_by_email,
+    send_invite_email,
 )
 from app.core.config import settings
 from app.modules.email_service import (
@@ -46,6 +47,7 @@ from app.schemas import (
     UserUpdate,
     UserResponse,
     GroupResponse,
+    UserInvite,
 )
 
 router = APIRouter()
@@ -537,6 +539,95 @@ Email: {current_user.email}
     logger.info(f"support_request finished: {support_request_data}")
 
     return JSONResponse(content={"message": "Support request sent"})
+
+
+@router.post("/invite")
+async def invite_user(
+    invite_data: Annotated[UserInvite, Depends()],
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    logger: TLogger = Depends(deps.get_logger),
+    user_store: UserStore = Depends(deps.get_user_store),
+    group_store: GroupStore = Depends(deps.get_group_store),
+):
+    """
+    Invite a user to join the current user's team. Creates the user with is_verified=False and stores the invite code in verification_code.
+    """
+    email = invite_data.email.lower()
+    
+    # Logging
+    logger.info(f"invite_user called: {email} by {current_user.email}")
+
+    # Check if user already exists
+    existing_user = user_store.get_by_email(email)
+    if existing_user is not None:
+        logger.error(f"Attempting to invite existing user: {email}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User already exists"
+        )
+
+    # Check if current user has a group
+    if not current_user.group:
+        logger.error(f"Current user {current_user.email} has no group")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You must be part of a team to send invites"
+        )
+
+    # Verify the group exists
+    group_data = group_store.get(current_user.group)
+    if not group_data:
+        logger.error(f"Group {current_user.group} does not exist")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid group"
+        )
+
+    # Generate invite code and expiry
+    invite_code = shortuuid.ShortUUID().random(length=6).upper()
+    invite_code_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
+    # Create the invited user (is_verified=False, no password, store invite code)
+    user_id = uuid4()
+    invited_user = User(
+        id=user_id,
+        email=email,
+        password=None,
+        disabled=False,
+        created_at=datetime.now(timezone.utc),
+        is_verified=False,
+        verification_code=invite_code,
+        verification_code_expires_at=invite_code_expires_at,
+        group=current_user.group,
+    )
+    user_store.create(invited_user, current_user.group)
+
+    # Send invite email (code is verification_code)
+    try:
+        inviter_name = current_user.full_name or current_user.email.split('@')[0]
+        send_invite_email(
+            email=email,
+            inviter_name=inviter_name,
+            group_id=current_user.group,
+            invite_url=settings.INVITE_URL
+        )
+        logger.info(f"Invite sent successfully to {email} with code {invite_code}")
+        return JSONResponse(content={
+            "message": "Invitation sent successfully",
+            "email": email
+        })
+    except Exception as e:
+        error_message = str(e)
+        if hasattr(e, "message"):
+            error_message = e.message
+        # Logging
+        logger.error(f"Error sending invite email: {error_message}")
+        # Rollback: delete the user
+        user_store.delete(current_user.group, str(user_id))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to send invitation email"
+        )
 
 
 @router.get("/me", response_model=UserResponse)

@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     ASSETS_DIR: str = join("app", "assets")
     FRONTEND_URL_PATH_VERIFICATION: str = "/auth/verification"
     FRONTEND_URL_PATH_PASSWORD_RESET: str = "/auth/password-reset"
+    FRONTEND_URL_PATH_INVITE: str = "/auth/invite"
     MIN_PASSWORD_LENGTH: int = 8
 
     # Custom validators
@@ -86,6 +87,12 @@ class Settings(BaseSettings):
     def PASSWORD_RESET_URL(self) -> AnyHttpUrl:
         return AnyHttpUrl(
             urljoin(str(self.FRONTEND_URL_BASE), self.FRONTEND_URL_PATH_PASSWORD_RESET)
+        )
+
+    @property
+    def INVITE_URL(self) -> AnyHttpUrl:
+        return AnyHttpUrl(
+            urljoin(str(self.FRONTEND_URL_BASE), self.FRONTEND_URL_PATH_INVITE)
         )
 
 

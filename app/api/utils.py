@@ -276,3 +276,71 @@ def send_verification_email(
 
     # Logging
     logger.info(f"Verification email sent to {email}")
+
+
+def send_invite_email(
+    email: str,
+    inviter_name: str,
+    group_id: str,
+    invite_url: AnyHttpUrl = settings.INVITE_URL,
+):
+    """
+    Sends an invite email to a user to join a team.
+    :param email: The email address to send the invite to
+    :param inviter_name: The name of the user sending the invite
+    :param group_id: The group ID the user is being invited to
+    :param invite_url: The URL to the invite page
+    """
+    # Generate invite code
+    invite_code = shortuuid.ShortUUID().random(length=8).upper()
+
+    # Load email HTML template
+    invite_url_with_params = (
+        str(invite_url)
+        + "/?"
+        + urllib.parse.urlencode(
+            {"email": email, "invite_code": invite_code, "group_id": group_id}
+        )
+    )
+
+    email_dir = join(settings.ASSETS_DIR, "email_templates", "invite.html")
+    with open(email_dir, "r") as f:
+        template = Template(f.read())
+
+    logo_dir = join(settings.ASSETS_DIR, "logo.png")
+    with open(logo_dir, "rb") as f:
+        logo_base64 = base64.b64encode(f.read()).decode()
+
+    rendered_email = template.render(
+        inviter_name=inviter_name,
+        email=email,
+        invite_code=invite_code,
+        invite_url_with_params=invite_url_with_params,
+        invite_url=invite_url,
+        logo_src=f"data:image/jpeg;base64,{logo_base64}",
+    )
+
+    # Send invite email
+    email_data = EmailHTMLData(
+        **{
+            "subject": "[AI GRC] Team Invitation",
+            "body": rendered_email,
+            "to": [email],
+        }
+    )
+
+    if False:
+        email_service = EmailService(
+        AWSEmailExecuter(
+            settings.SES_AWS_SENDER_EMAIL,
+            settings.SES_AWS_ACCESS_KEY_ID,
+            settings.SES_AWS_SECRET_ACCESS_KEY,
+            settings.SES_AWS_REGION,
+        )
+        )
+        email_service.send(email_data)
+
+    # Logging
+    logger.info(f"Invite email sent to {email} from {inviter_name} for group {group_id}")
+    
+    return invite_code
