@@ -1242,6 +1242,7 @@ class TestUserAdmin:
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
+            role="admin",
             group="test_group"
         )
         user_store.create(admin_user, admin_user.group)
@@ -1340,6 +1341,7 @@ class TestUserAdmin:
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
+            role="admin",
             group="test_group"
         )
         user_store.create(admin_user, admin_user.group)
@@ -1700,3 +1702,103 @@ class TestUserAdmin:
         assert response_data["email"] == user["email"]
         assert response_data["full_name"] == "Updated Self Name"
         assert response_data["disabled"] is False  # Should remain unchanged
+
+    def test_list_users_regular_user_forbidden(self, request):
+        """Test that regular users cannot access the list users endpoint"""
+        user_store = request.instance.user_store
+        client = request.instance.client
+        
+        # Create a regular user (non-admin)
+        regular_user = User(
+            id=uuid.uuid4(),
+            email="goricoaico+regular@gmail.com",
+            password=get_password_hash("UserPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+            group="test_group"
+        )
+        user_store.create(regular_user, regular_user.group)
+        
+        # Get regular user token
+        user_token = create_access_token(data={"sub": regular_user.email})
+        user_headers = {"Authorization": f"Bearer {user_token}"}
+        
+        # Try to list users as regular user - should be forbidden
+        response = client.get(f"{settings.API_V1_STR}/user/users", headers=user_headers)
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Access denied"
+
+    def test_create_user_regular_user_forbidden(self, request):
+        """Test that regular users cannot create other users"""
+        user_store = request.instance.user_store
+        client = request.instance.client
+        
+        # Create a regular user (non-admin)
+        regular_user = User(
+            id=uuid.uuid4(),
+            email="goricoaico+regular@gmail.com",
+            password=get_password_hash("UserPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+            group="test_group"
+        )
+        user_store.create(regular_user, regular_user.group)
+        
+        # Get regular user token
+        user_token = create_access_token(data={"sub": regular_user.email})
+        user_headers = {"Authorization": f"Bearer {user_token}"}
+        
+        # Try to create a new user as regular user - should be forbidden
+        new_user_data = {
+            "email": "goricoaico+newuser@gmail.com",
+            "password": "NewUserPass123!"
+        }
+        response = client.post(f"{settings.API_V1_STR}/user/users", json=new_user_data, headers=user_headers)
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Access denied"
+
+    def test_update_other_user_regular_user_forbidden(self, request):
+        """Test that regular users cannot update other users' data"""
+        user_store = request.instance.user_store
+        client = request.instance.client
+        
+        # Create two regular users
+        user1 = User(
+            id=uuid.uuid4(),
+            email="goricoaico+user1@gmail.com",
+            password=get_password_hash("UserPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+            group="test_group"
+        )
+        user2 = User(
+            id=uuid.uuid4(),
+            email="goricoaico+user2@gmail.com",
+            password=get_password_hash("UserPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+            group="test_group"
+        )
+        user_store.create(user1, user1.group)
+        user_store.create(user2, user2.group)
+        
+        # Get user1 token
+        user1_token = create_access_token(data={"sub": user1.email})
+        user1_headers = {"Authorization": f"Bearer {user1_token}"}
+        
+        # Try to update user2's data as user1 - should be forbidden
+        update_data = {
+            "full_name": "Updated by User1",
+            "disabled": True
+        }
+        response = client.put(
+            f"{settings.API_V1_STR}/user/users/{user2.id}",
+            json=update_data,
+            headers=user1_headers
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Access denied"

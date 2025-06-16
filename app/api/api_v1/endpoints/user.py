@@ -606,6 +606,13 @@ async def get_user_via_email(
             if group_data:
                 group_response = GroupResponse.model_validate(group_data.model_dump())
             
+        # Check group matches unless user is admin
+        if current_user.role != "admin" and user_data.group != current_user.group:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+        
         # Convert user data to UserResponse model, ensuring UUID is converted to string
         user_response = UserResponse(
             id=str(user_data.id),  # Convert UUID to string
@@ -618,7 +625,6 @@ async def get_user_via_email(
             group=group_response
         )
             
-        # TODO: Add authorization check (admin or self)
         return JSONResponse(content=user_response.model_dump(mode="json"))
     except HTTPException:
         raise
@@ -642,7 +648,14 @@ async def list_users(
     """
     List all users with pagination. Admin only.
     """
-    # TODO: Add admin role check
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
     try:
         # Get all users from store
         users, total = user_store.list(page=skip//limit + 1, limit=limit)
@@ -703,6 +716,13 @@ async def get_user_by_id(
                 detail="User not found"
             )
             
+        # Check group ownership unless user is admin
+        if current_user.role != "admin" and user_data.id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+        
         # Fetch group data if user has a group
         group_response = None
         if user_data.group:
@@ -756,7 +776,14 @@ async def create_user_admin(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User already exists"
             )
-
+        
+        # Check group ownership unless user is admin
+        if current_user.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+        
         # For now, use default group
         # TODO: Allow specifying group in admin user creation
         default_group_id = "default"
