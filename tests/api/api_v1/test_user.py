@@ -1802,3 +1802,109 @@ class TestUserAdmin:
         )
         assert response.status_code == 403
         assert response.json()["detail"] == "Access denied"
+
+    def test_update_user_put_endpoint_admin_or_self_only(self, request):
+        """Test that PUT /users/{user_id} only allows admin or self to update records"""
+        user_store = request.instance.user_store
+        client = request.instance.client
+        
+        # Create three users: admin, user1, and user2
+        admin_user = User(
+            id=uuid.uuid4(),
+            email="goricoaico+admin@gmail.com",
+            password=get_password_hash("AdminPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+            role="admin",
+            group="test_group"
+        )
+        
+        user1 = User(
+            id=uuid.uuid4(),
+            email="goricoaico+user1@gmail.com",
+            password=get_password_hash("UserPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+            group="test_group"
+        )
+        
+        user2 = User(
+            id=uuid.uuid4(),
+            email="goricoaico+user2@gmail.com",
+            password=get_password_hash("UserPass123!"),
+            disabled=False,
+            created_at=datetime.now(timezone.utc),
+            is_verified=True,
+            group="test_group"
+        )
+        
+        user_store.create(admin_user, admin_user.group)
+        user_store.create(user1, user1.group)
+        user_store.create(user2, user2.group)
+        
+        # Test 1: Admin can update any user (should succeed)
+        admin_token = create_access_token(data={"sub": admin_user.email})
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        update_data = {"full_name": "Updated by Admin"}
+        response = client.put(
+            f"{settings.API_V1_STR}/user/users/{user1.id}",
+            json=update_data,
+            headers=admin_headers
+        )
+        assert response.status_code == 200
+        assert response.json()["full_name"] == "Updated by Admin"
+        
+        # Test 2: User can update themselves (should succeed)
+        user1_token = create_access_token(data={"sub": user1.email})
+        user1_headers = {"Authorization": f"Bearer {user1_token}"}
+        
+        update_data = {"full_name": "Updated by Self"}
+        response = client.put(
+            f"{settings.API_V1_STR}/user/users/{user1.id}",
+            json=update_data,
+            headers=user1_headers
+        )
+        assert response.status_code == 200
+        assert response.json()["full_name"] == "Updated by Self"
+        
+        # Test 3: User cannot update another user (should fail)
+        user1_token = create_access_token(data={"sub": user1.email})
+        user1_headers = {"Authorization": f"Bearer {user1_token}"}
+        
+        update_data = {"full_name": "Updated by User1"}
+        response = client.put(
+            f"{settings.API_V1_STR}/user/users/{user2.id}",
+            json=update_data,
+            headers=user1_headers
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Access denied"
+        
+        # Test 4: User2 cannot update user1 (should fail)
+        user2_token = create_access_token(data={"sub": user2.email})
+        user2_headers = {"Authorization": f"Bearer {user2_token}"}
+        
+        update_data = {"full_name": "Updated by User2"}
+        response = client.put(
+            f"{settings.API_V1_STR}/user/users/{user1.id}",
+            json=update_data,
+            headers=user2_headers
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Access denied"
+        
+        # Test 5: Admin can update themselves (should succeed)
+        admin_token = create_access_token(data={"sub": admin_user.email})
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        update_data = {"full_name": "Admin Updated Self"}
+        response = client.put(
+            f"{settings.API_V1_STR}/user/users/{admin_user.id}",
+            json=update_data,
+            headers=admin_headers
+        )
+        assert response.status_code == 200
+        assert response.json()["full_name"] == "Admin Updated Self"

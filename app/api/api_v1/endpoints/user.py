@@ -871,7 +871,12 @@ async def update_user(
 
         user = User.model_validate(user_data)
         
-        # TODO: Add authorization check (admin or self)
+        # Check group ownership unless user is admin
+        if current_user.role != "admin" and user_data.id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
         
         # Update user fields
         update_data = user_update.model_dump(exclude_unset=True)
