@@ -133,7 +133,7 @@ class SupportRequest(BaseModel):
 
 class UserUpdate(BaseModel):
     full_name: str | None = None
-    group_id: UUID4 | None = None
+    #group_id: UUID4 | None = None
     password: str | None = None
 
     @field_validator("password")

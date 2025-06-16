@@ -7,7 +7,7 @@ from typing import Annotated, List, Optional
 from uuid import UUID, uuid4
 
 import shortuuid
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query, Body
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from jinja2 import Template
@@ -450,17 +450,25 @@ async def password_reset_verify(
 
 @router.post("/update_profile")
 async def update_profile(
+    user_update: Annotated[UserUpdate, Body()],
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    user_update: UserUpdate = Depends(),
     logger: TLogger = Depends(deps.get_logger),
     user_store: UserStore = Depends(deps.get_user_store),
 ):
-    # Update user record
+    # Get the validated update data
     update_data = user_update.model_dump(exclude_unset=True)
+    logger.info(f"update_data: {update_data}")
+    # Remove any fields that shouldn't be updated
+    update_data.pop("email", None)  # Email should not be updatable through this endpoint
+    update_data.pop("group_id", None)  # Group should be updated through a different endpoint
     
-    # Handle password hashing
+    # Handle password hashing if password is being updated
     if "password" in update_data and update_data["password"] is not None:
         update_data["password"] = get_password_hash(update_data["password"])
+    
+    # Only proceed if there are actual fields to update
+    if not update_data:
+        return JSONResponse(content={"message": "No fields to update"})
     
     # Update user
     logger.info(f"update_profile called: {current_user.email} - {update_data}")

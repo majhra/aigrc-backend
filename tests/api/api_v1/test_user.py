@@ -902,39 +902,323 @@ class TestUser:
         assert response.json() == expected_response
 
     def test_update_profile_success(self, request):
-        app = request.instance.app
-        client = request.instance.client
         user_store = request.instance.user_store
+        client = request.instance.client
 
-        app.dependency_overrides[deps.get_user_store] = lambda: user_store
+        request.instance.app.dependency_overrides[deps.get_user_store] = (
+            lambda: user_store
+        )
 
-        # Add user to store
+        # Create a test user
         password_plain_text = request.instance.valid_passwords[0]
         user = {
             "id": str(uuid.uuid4()),
-            "email": "gorocoaico@gmail.com",
-            "full_name": None,
+            "email": "gorocoaico+test_update_profile_success@gmail.com",
+            "full_name": "Original Name",
             "password": get_password_hash(password_plain_text),
             "disabled": False,
-            "created_at": None,
+            "created_at": datetime.now(timezone.utc),
             "last_login": None,
             "is_verified": True,
-            "verification_code": None,
-            "verification_code_expires_at": None,
-            "group":"test_group"
+            "group": "test_group"
         }
         user_store.create(User(**user), user['group'])
 
-        # Mock current user so we are authenticated - use the complete user object
-        app.dependency_overrides[deps.get_current_active_user] = lambda: User(**user)
+        # Login to get token
+        login_data = {"username": user["email"], "password": password_plain_text}
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        login_response = client.post(
+            f"{settings.API_V1_STR}/user/login", data=login_data, headers=login_headers
+        )
+        token = login_response.json()["access_token"]
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"  # Add content type header
+        }
 
         # Update profile
-        data = {"full_name": "John Doe"}
-        response = client.post(f"{settings.API_V1_STR}/user/update_profile", params=data)
+        update_data = {"full_name": "New Name"}
+        response = client.post(
+            f"{settings.API_V1_STR}/user/update_profile",
+            json=update_data,  # Use json instead of params
+            headers=headers
+        )
 
-        expected_response = {"message": "Profile updated successfully"}
         assert response.status_code == status.HTTP_200_OK
-        assert response.json() == expected_response
+        assert response.json() == {"message": "Profile updated successfully"}
+
+        # Verify the update
+        updated_user = user_store.get_by_email(user["email"])
+        assert updated_user.full_name == "New Name"
+        assert updated_user.email == user["email"]  # Email should not change
+        assert updated_user.group == user["group"]  # Group should not change
+
+    def test_fail_update_profile_with_username(self, request):
+        user_store = request.instance.user_store
+        client = request.instance.client
+
+        request.instance.app.dependency_overrides[deps.get_user_store] = (
+            lambda: user_store
+        )
+
+        # Create a test user
+        password_plain_text = request.instance.valid_passwords[0]
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": "gorocoaico+test_update_profile_username@gmail.com",
+            "full_name": None,
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": None,
+            "is_verified": True,
+            "group": "test_group"
+        }
+        user_store.create(User(**user), user['group'])
+
+        # Login to get token
+        login_data = {"username": user["email"], "password": password_plain_text}
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        login_response = client.post(
+            f"{settings.API_V1_STR}/user/login", data=login_data, headers=login_headers
+        )
+        token = login_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Update profile with username field
+        update_data = {"username": "New Username"}
+        response = client.post(
+            f"{settings.API_V1_STR}/user/update_profile",
+            json=update_data,
+            headers=headers
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"message": "No fields to update"}
+
+    def test_update_profile_non_updatable_fields(self, request):
+        user_store = request.instance.user_store
+        client = request.instance.client
+
+        request.instance.app.dependency_overrides[deps.get_user_store] = (
+            lambda: user_store
+        )
+
+        # Create a test user
+        password_plain_text = request.instance.valid_passwords[0]
+        original_email = "gorocoaico+test_update_profile_fields@gmail.com"
+        original_group = "test_group"
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": original_email,
+            "full_name": "Original Name",
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": None,
+            "is_verified": True,
+            "group": original_group
+        }
+        user_store.create(User(**user), user['group'])
+
+        # Login to get token
+        login_data = {"username": user["email"], "password": password_plain_text}
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        login_response = client.post(
+            f"{settings.API_V1_STR}/user/login", data=login_data, headers=login_headers
+        )
+        token = login_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Try to update non-updatable fields
+        update_data = {
+            "email": "new.email@example.com",
+            "group_id": str(uuid.uuid4()),
+            "full_name": "New Name"  # This one should update
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/user/update_profile",
+            json=update_data,
+            headers=headers
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"message": "Profile updated successfully"}
+
+        # Verify only updatable fields were changed
+        updated_user = user_store.get_by_email(original_email)
+        assert updated_user.email == original_email  # Email should not change
+        assert updated_user.group == original_group  # Group should not change
+        assert updated_user.full_name == "New Name"  # This should have updated
+
+    def test_update_profile_to_current_values(self, request):
+        user_store = request.instance.user_store
+        client = request.instance.client
+
+        request.instance.app.dependency_overrides[deps.get_user_store] = (
+            lambda: user_store
+        )
+
+        # Create a test user
+        password_plain_text = request.instance.valid_passwords[0]
+        original_name = "Original Name"
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": "gorocoaico+test_update_profile_current@gmail.com",
+            "full_name": original_name,
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": None,
+            "is_verified": True,
+            "group": "test_group"
+        }
+        user_store.create(User(**user), user['group'])
+
+        # Login to get token
+        login_data = {"username": user["email"], "password": password_plain_text}
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        login_response = client.post(
+            f"{settings.API_V1_STR}/user/login", data=login_data, headers=login_headers
+        )
+        token = login_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Update profile with current values
+        update_data = {"full_name": original_name}
+        response = client.post(
+            f"{settings.API_V1_STR}/user/update_profile",
+            json=update_data,
+            headers=headers
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"message": "Profile updated successfully"}
+
+        # Verify the values remain the same
+        updated_user = user_store.get_by_email(user["email"])
+        assert updated_user.full_name == original_name
+
+    def test_update_profile_empty_data(self, request):
+        user_store = request.instance.user_store
+        client = request.instance.client
+
+        request.instance.app.dependency_overrides[deps.get_user_store] = (
+            lambda: user_store
+        )
+
+        # Create a test user
+        password_plain_text = request.instance.valid_passwords[0]
+        original_name = "Original Name"
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": "gorocoaico+test_update_profile_empty@gmail.com",
+            "full_name": original_name,
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": None,
+            "is_verified": True,
+            "group": "test_group"
+        }
+        user_store.create(User(**user), user['group'])
+
+        # Login to get token
+        login_data = {"username": user["email"], "password": password_plain_text}
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        login_response = client.post(
+            f"{settings.API_V1_STR}/user/login", data=login_data, headers=login_headers
+        )
+        token = login_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Update profile with empty data
+        update_data = {}
+        response = client.post(
+            f"{settings.API_V1_STR}/user/update_profile",
+            json=update_data,
+            headers=headers
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"message": "No fields to update"}
+
+        # Verify nothing changed
+        updated_user = user_store.get_by_email(user["email"])
+        assert updated_user.full_name == original_name
+
+        # Update profile with ignored data
+        update_data = {"not_a_name": "noname", "not_another_field": "not_another_value"}
+        response = client.post(
+            f"{settings.API_V1_STR}/user/update_profile",
+            json=update_data,
+            headers=headers
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"message": "No fields to update"}
+
+        # Verify nothing changed
+        updated_user = user_store.get_by_email(user["email"])
+        assert updated_user.full_name == original_name
+
+    def test_update_profile_multiple_fields(self, request):
+        user_store = request.instance.user_store
+        client = request.instance.client
+
+        request.instance.app.dependency_overrides[deps.get_user_store] = (
+            lambda: user_store
+        )
+
+        # Create a test user
+        password_plain_text = request.instance.valid_passwords[0]
+        new_password = request.instance.valid_passwords[1]
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": "gorocoaico+test_update_profile_multiple@gmail.com",
+            "full_name": "Original Name",
+            "password": get_password_hash(password_plain_text),
+            "disabled": False,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": None,
+            "is_verified": True,
+            "group": "test_group"
+        }
+        user_store.create(User(**user), user['group'])
+
+        # Login to get token
+        login_data = {"username": user["email"], "password": password_plain_text}
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        login_response = client.post(
+            f"{settings.API_V1_STR}/user/login", data=login_data, headers=login_headers
+        )
+        token = login_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Update multiple fields
+        update_data = {
+            "full_name": "New Name",
+            "password": new_password
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/user/update_profile",
+            json=update_data,
+            headers=headers
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"message": "Profile updated successfully"}
+
+        # Verify all fields were updated
+        updated_user = user_store.get_by_email(user["email"])
+        assert updated_user.full_name == "New Name"
+        
+        # Verify password was updated by trying to login with new password
+        new_login_data = {"username": user["email"], "password": new_password}
+        new_login_response = client.post(
+            f"{settings.API_V1_STR}/user/login", data=new_login_data, headers=login_headers
+        )
+        assert new_login_response.status_code == status.HTTP_200_OK
 
     def test_update_profile_unauthenticated(self, request):
         client = request.instance.client

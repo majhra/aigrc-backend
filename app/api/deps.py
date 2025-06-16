@@ -95,7 +95,7 @@ async def get_current_user(
     
     user = user_store.get_by_email(token_data.email)
     logger.info(
-        f"username : {user.full_name}, email: {user.email}, id: {user.id}, disabled: {user.disabled}"
+        f"Full name : {user.full_name}, email: {user.email}, id: {user.id}, disabled: {user.disabled}"
     )
     if user is None:
         raise credentials_exception
