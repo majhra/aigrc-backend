@@ -1,11 +1,13 @@
 from typing import List, Dict, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 from uuid import UUID
 
 
 class TestSummaryMetrics(BaseModel):
     """Summary metrics for tests"""
+    model_config = ConfigDict(from_attributes=True)
+    
     total_tests: int = Field(..., description="Total number of tests")
     active_tests: int = Field(..., description="Number of active tests")
     draft_tests: int = Field(..., description="Number of draft tests")
@@ -24,6 +26,8 @@ class TestSummaryMetrics(BaseModel):
 
 class ExecutionSummaryMetrics(BaseModel):
     """Summary metrics for test executions"""
+    model_config = ConfigDict(from_attributes=True)
+    
     total_executions: int = Field(..., description="Total number of executions")
     pending_validations: int = Field(..., description="Number of executions pending validation")
     in_progress_validations: int = Field(..., description="Number of executions with validation in progress")
@@ -41,6 +45,8 @@ class ExecutionSummaryMetrics(BaseModel):
 
 class SummaryTestReport(BaseModel):
     """Complete test summary report"""
+    model_config = ConfigDict(from_attributes=True)
+    
     test_metrics: TestSummaryMetrics = Field(..., description="Test-related metrics")
     execution_metrics: ExecutionSummaryMetrics = Field(..., description="Execution-related metrics")
     generated_at: datetime = Field(..., description="When this report was generated")
@@ -48,6 +54,8 @@ class SummaryTestReport(BaseModel):
 
 class TestExecutionTrend(BaseModel):
     """Execution trend data point"""
+    model_config = ConfigDict(from_attributes=True)
+    
     date: str = Field(..., description="Date in YYYY-MM-DD format")
     executions: int = Field(..., description="Number of executions on this date")
     validations: int = Field(..., description="Number of validations on this date")
@@ -56,6 +64,8 @@ class TestExecutionTrend(BaseModel):
 
 class ExecutionTestTrendsReport(BaseModel):
     """Execution trends over time"""
+    model_config = ConfigDict(from_attributes=True)
+    
     trends: List[TestExecutionTrend] = Field(..., description="Daily execution trends")
     period_days: int = Field(..., description="Number of days in the trend period")
     generated_at: datetime = Field(..., description="When this report was generated")
@@ -63,6 +73,8 @@ class ExecutionTestTrendsReport(BaseModel):
 
 class TestPerformanceMetrics(BaseModel):
     """Performance metrics for tests"""
+    model_config = ConfigDict(from_attributes=True)
+    
     test_id: UUID = Field(..., description="Test identifier")
     test_name: str = Field(..., description="Test name")
     total_executions: int = Field(..., description="Total executions for this test")
@@ -74,5 +86,28 @@ class TestPerformanceMetrics(BaseModel):
 
 class PerformanceTestReport(BaseModel):
     """Performance report for all tests"""
+    model_config = ConfigDict(from_attributes=True)
+    
     performance_metrics: List[TestPerformanceMetrics] = Field(..., description="Performance metrics for each test")
+    generated_at: datetime = Field(..., description="When this report was generated")
+
+
+class IndividualTestTrendsReport(BaseModel):
+    """Execution trends for a specific test"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    test_id: UUID = Field(..., description="Test identifier")
+    test_name: str = Field(..., description="Test name")
+    trends: List[TestExecutionTrend] = Field(..., description="Daily execution trends for this test")
+    period_days: int = Field(..., description="Number of days in the trend period")
+    generated_at: datetime = Field(..., description="When this report was generated")
+
+
+class IndividualTestPerformanceReport(BaseModel):
+    """Performance report for a specific test"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    test_id: UUID = Field(..., description="Test identifier")
+    test_name: str = Field(..., description="Test name")
+    performance_metrics: TestPerformanceMetrics = Field(..., description="Performance metrics for this test")
     generated_at: datetime = Field(..., description="When this report was generated") 

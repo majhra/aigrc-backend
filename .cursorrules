@@ -14,7 +14,7 @@ No sweeping changes.
 Make code precise, modular, testable.
 Every function should have at least two tests. One test for the success case and one test for error cases.
 Use 'python -m pytest' to run tests.
-
+pytest runs on Windows, cwd is D:\Documents\Biz\AI\MVP\backend, run pytest directly.
 
 # Code Style
 - avoid unnecessary explanations

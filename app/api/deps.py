@@ -67,11 +67,7 @@ def get_reports_store(
     """
     Get the reports store instance.
     """
-    # Use the same Redis store as tests for consistency
-    redis_store = RedisStore(
-        logger, "tests", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
-    )
-    return ReportsStore(test_store, execution_store, redis_store)
+    return ReportsStore(test_store, execution_store)
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],

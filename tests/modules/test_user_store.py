@@ -6,6 +6,7 @@ from uuid import uuid4
 from app.modules.user_store import UserStore
 from app.modules.store_interface import LocalStore
 from app.schemas import User
+import pytest
 
 
 class TestUserStore(unittest.TestCase):
@@ -148,6 +149,7 @@ class TestUserStore(unittest.TestCase):
         self.assertEqual(result, self.test_user)
         self.assertEqual(result.group, self.test_group_id)
 
+    @pytest.mark.filterwarnings(r"ignore:Pydantic serializer warnings:UserWarning")
     def test_create_without_id(self):
         """Test user creation when user doesn't have an ID."""
         user_without_id = User(

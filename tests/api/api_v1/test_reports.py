@@ -70,20 +70,30 @@ class TestReports:
         def mock_get_current_active_user():
             return test_user
         
-        # Mock the reports store dependency to use LocalStore
+        # Create a shared LocalStore instance for all stores
         from app.modules.reports_store import ReportsStore
         from app.modules.tests_store import AITestStore
         from app.modules.executions_store import ExecutedTestStore
         from app.modules.store_interface import LocalStore
         
+        # Create a single shared store instance
+        shared_store = LocalStore()
+        
         def mock_get_reports_store():
-            store = LocalStore()
-            tests_store = AITestStore(store)
-            executions_store = ExecutedTestStore(store)
-            return ReportsStore(tests_store, executions_store, store)
+            tests_store = AITestStore(shared_store)
+            executions_store = ExecutedTestStore(shared_store)
+            return ReportsStore(tests_store, executions_store, shared_store)
+        
+        def mock_get_test_store():
+            return AITestStore(shared_store)
+        
+        def mock_get_execution_store():
+            return ExecutedTestStore(shared_store)
         
         app.dependency_overrides[deps.get_current_active_user] = mock_get_current_active_user
         app.dependency_overrides[deps.get_reports_store] = mock_get_reports_store
+        app.dependency_overrides[deps.get_test_store] = mock_get_test_store
+        app.dependency_overrides[deps.get_execution_store] = mock_get_execution_store
         return {"Authorization": "Bearer test-token"}
 
     def test_get_summary_report_success(self, client, authenticated_headers, test_user):
@@ -194,6 +204,172 @@ class TestReports:
             f"{settings.API_V1_STR}/reports/summary",
             f"{settings.API_V1_STR}/reports/trends",
             f"{settings.API_V1_STR}/reports/performance"
+        ]
+        
+        for endpoint in endpoints:
+            response = client.get(endpoint)
+            assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_get_individual_test_trends_success(self, client, authenticated_headers, test_user):
+        """Test successful individual test trends retrieval."""
+        # Create a test first
+        test_data = self.TEST_DATA
+        test_response = client.post(
+            f"{settings.API_V1_STR}/tests/",
+            json=test_data.model_dump(),
+            headers=authenticated_headers
+        )
+        assert test_response.status_code == status.HTTP_201_CREATED
+        test_id = test_response.json()["id"]
+        
+        # Test individual trends endpoint
+        response = client.get(
+            f"{settings.API_V1_STR}/reports/trends/{test_id}",
+            headers=authenticated_headers
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        
+        # Verify response structure
+        assert "test_id" in data
+        assert "test_name" in data
+        assert "trends" in data
+        assert "period_days" in data
+        assert "generated_at" in data
+        
+        # Verify test-specific data
+        assert data["test_id"] == test_id
+        assert data["test_name"] == test_data.name
+        assert data["period_days"] == 30  # Default
+        
+        # Verify trends structure
+        trends = data["trends"]
+        assert isinstance(trends, list)
+        assert len(trends) == 30  # Default 30 days
+        
+        if trends:
+            trend = trends[0]
+            assert "date" in trend
+            assert "executions" in trend
+            assert "validations" in trend
+            assert "passed" in trend
+
+    def test_get_individual_test_trends_with_custom_days(self, client, authenticated_headers, test_user):
+        """Test individual test trends with custom number of days."""
+        # Create a test first
+        test_data = self.TEST_DATA
+        test_response = client.post(
+            f"{settings.API_V1_STR}/tests/",
+            json=test_data.model_dump(),
+            headers=authenticated_headers
+        )
+        assert test_response.status_code == status.HTTP_201_CREATED
+        test_id = test_response.json()["id"]
+        
+        # Test with custom days
+        response = client.get(
+            f"{settings.API_V1_STR}/reports/trends/{test_id}?days=7",
+            headers=authenticated_headers
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        
+        assert data["period_days"] == 7
+        assert len(data["trends"]) == 7
+
+    def test_get_individual_test_trends_invalid_days(self, client, authenticated_headers, test_user):
+        """Test individual test trends with invalid days parameter."""
+        # Create a test first
+        test_data = self.TEST_DATA
+        test_response = client.post(
+            f"{settings.API_V1_STR}/tests/",
+            json=test_data.model_dump(),
+            headers=authenticated_headers
+        )
+        assert test_response.status_code == status.HTTP_201_CREATED
+        test_id = test_response.json()["id"]
+        
+        # Test with invalid days
+        response = client.get(
+            f"{settings.API_V1_STR}/reports/trends/{test_id}?days=0",
+            headers=authenticated_headers
+        )
+        
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_get_individual_test_trends_test_not_found(self, client, authenticated_headers, test_user):
+        """Test individual test trends with non-existent test ID."""
+        non_existent_test_id = str(uuid4())
+        
+        response = client.get(
+            f"{settings.API_V1_STR}/reports/trends/{non_existent_test_id}",
+            headers=authenticated_headers
+        )
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_get_individual_test_performance_success(self, client, authenticated_headers, test_user):
+        """Test successful individual test performance retrieval."""
+        # Create a test first
+        test_data = self.TEST_DATA
+        test_response = client.post(
+            f"{settings.API_V1_STR}/tests/",
+            json=test_data.model_dump(),
+            headers=authenticated_headers
+        )
+        assert test_response.status_code == status.HTTP_201_CREATED
+        test_id = test_response.json()["id"]
+        
+        # Test individual performance endpoint
+        response = client.get(
+            f"{settings.API_V1_STR}/reports/performance/{test_id}",
+            headers=authenticated_headers
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        
+        # Verify response structure
+        assert "test_id" in data
+        assert "test_name" in data
+        assert "performance_metrics" in data
+        assert "generated_at" in data
+        
+        # Verify test-specific data
+        assert data["test_id"] == test_id
+        assert data["test_name"] == test_data.name
+        
+        # Verify performance metrics structure
+        performance_metrics = data["performance_metrics"]
+        assert "test_id" in performance_metrics
+        assert "test_name" in performance_metrics
+        assert "total_executions" in performance_metrics
+        assert "success_rate" in performance_metrics
+        assert "avg_response_time" in performance_metrics
+        assert "avg_cost" in performance_metrics
+        assert "last_executed" in performance_metrics
+
+    def test_get_individual_test_performance_test_not_found(self, client, authenticated_headers, test_user):
+        """Test individual test performance with non-existent test ID."""
+        non_existent_test_id = str(uuid4())
+        
+        response = client.get(
+            f"{settings.API_V1_STR}/reports/performance/{non_existent_test_id}",
+            headers=authenticated_headers
+        )
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_individual_test_endpoints_require_authentication(self, client):
+        """Test that individual test endpoints require authentication."""
+        test_id = str(uuid4())
+        endpoints = [
+            f"{settings.API_V1_STR}/reports/trends/{test_id}",
+            f"{settings.API_V1_STR}/reports/performance/{test_id}"
         ]
         
         for endpoint in endpoints:

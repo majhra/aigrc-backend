@@ -13,7 +13,9 @@ from app.schemas.reports import (
     TestPerformanceMetrics,
     SummaryTestReport,
     ExecutionTestTrendsReport,
-    PerformanceTestReport
+    PerformanceTestReport,
+    IndividualTestTrendsReport,
+    IndividualTestPerformanceReport
 )
 from app.schemas import AITestSchema, ExecutedTestSchema, User
 
@@ -91,7 +93,7 @@ class ReportsStore:
                 # Count passed validations
                 passed_count = sum(
                     1 for validation in execution.validations
-                    if validation.status == "PASSED"
+                    if validation.status == "PASS"
                 )
                 daily_stats[date_str]["passed"] += passed_count
         
@@ -192,6 +194,155 @@ class ReportsStore:
             ))
         
         return PerformanceTestReport(
+            performance_metrics=performance_metrics,
+            generated_at=now
+        )
+
+    def get_individual_test_trends(
+        self,
+        test_id: UUID,
+        user: User,
+        days: int = 30
+    ) -> IndividualTestTrendsReport:
+        """Generate execution trends for a specific test over a specified period"""
+        now = datetime.now(timezone.utc)
+        start_date = now - timedelta(days=days)
+        
+        # Get the specific test (filtered by user's group)
+        test = self._tests_store.get(str(test_id))
+        if not test or test.group_id != user.group:
+            raise ValueError(f"Test {test_id} not found or access denied")
+        
+        # Get all executions for this test
+        executions, _ = self._executions_store.list(
+            test_id=str(test_id),
+            page=1,
+            limit=10000
+        )
+        
+        # Filter executions by date range
+        recent_executions = [
+            ex for ex in executions
+            if ex.executed_at >= start_date
+        ]
+        
+        # Group executions by date
+        daily_stats = defaultdict(lambda: {"executions": 0, "validations": 0, "passed": 0})
+        
+        for execution in recent_executions:
+            date_str = execution.executed_at.strftime("%Y-%m-%d")
+            daily_stats[date_str]["executions"] += 1
+            
+            if execution.validation_status == "VALIDATED":
+                daily_stats[date_str]["validations"] += 1
+                
+                # Count passed validations
+                passed_count = sum(
+                    1 for validation in execution.validations
+                    if validation.status == "PASS"
+                )
+                daily_stats[date_str]["passed"] += passed_count
+        
+        # Convert to trend data points
+        trends = []
+        for i in range(days):
+            date = now - timedelta(days=i)
+            date_str = date.strftime("%Y-%m-%d")
+            stats = daily_stats[date_str]
+            
+            trends.append(TestExecutionTrend(
+                date=date_str,
+                executions=stats["executions"],
+                validations=stats["validations"],
+                passed=stats["passed"]
+            ))
+        
+        # Sort by date (oldest first)
+        trends.sort(key=lambda x: x.date)
+        
+        return IndividualTestTrendsReport(
+            test_id=test_id,
+            test_name=test.name,
+            trends=trends,
+            period_days=days,
+            generated_at=now
+        )
+
+    def get_individual_test_performance(
+        self,
+        test_id: UUID,
+        user: User
+    ) -> IndividualTestPerformanceReport:
+        """Generate performance metrics for a specific test"""
+        now = datetime.now(timezone.utc)
+        
+        # Get the specific test (filtered by user's group)
+        test = self._tests_store.get(str(test_id))
+        if not test or test.group_id != user.group:
+            raise ValueError(f"Test {test_id} not found or access denied")
+        
+        # Get all executions for this test
+        executions, _ = self._executions_store.list(
+            test_id=str(test_id),
+            page=1,
+            limit=10000
+        )
+        
+        if not executions:
+            # No executions for this test
+            performance_metrics = TestPerformanceMetrics(
+                test_id=test.id,
+                test_name=test.name,
+                total_executions=0,
+                success_rate=0.0,
+                avg_response_time=None,
+                avg_cost=None,
+                last_executed=None
+            )
+        else:
+            # Calculate metrics
+            total_executions = len(executions)
+            validated_executions = [ex for ex in executions if ex.validation_status == "VALIDATED"]
+            
+            # Calculate success rate
+            if validated_executions:
+                passed_count = sum(
+                    1 for ex in validated_executions
+                    for validation in ex.validations
+                    if validation.status == "PASS"
+                )
+                success_rate = (passed_count / len(validated_executions)) * 100
+            else:
+                success_rate = 0.0
+            
+            # Calculate average response time
+            response_times = []
+            costs = []
+            for ex in executions:
+                if ex.benchmarks and ex.benchmarks.response_time:
+                    response_times.append(ex.benchmarks.response_time)
+                if ex.benchmarks and ex.benchmarks.cost:
+                    costs.append(ex.benchmarks.cost)
+            
+            avg_response_time = sum(response_times) / len(response_times) if response_times else None
+            avg_cost = sum(costs) / len(costs) if costs else None
+            
+            # Get last execution time
+            last_executed = max(ex.executed_at for ex in executions) if executions else None
+            
+            performance_metrics = TestPerformanceMetrics(
+                test_id=test.id,
+                test_name=test.name,
+                total_executions=total_executions,
+                success_rate=success_rate,
+                avg_response_time=avg_response_time,
+                avg_cost=avg_cost,
+                last_executed=last_executed
+            )
+        
+        return IndividualTestPerformanceReport(
+            test_id=test_id,
+            test_name=test.name,
             performance_metrics=performance_metrics,
             generated_at=now
         )
