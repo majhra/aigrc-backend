@@ -14,6 +14,7 @@ from app.schemas import TokenData, User
 from app.modules.executions_store import ExecutedTestStore
 from app.modules.user_store import UserStore
 from app.modules.group_store import GroupStore
+from app.modules.reports_store import ReportsStore
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/user/login", auto_error=False
@@ -56,6 +57,21 @@ def get_execution_store(logger: TLogger = Depends(get_logger)) -> ExecutedTestSt
     return ExecutedTestStore(RedisStore(
         logger, "execution", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
     ))
+
+
+def get_reports_store(
+    logger: TLogger = Depends(get_logger),
+    test_store: MyTestStore = Depends(get_test_store),
+    execution_store: ExecutedTestStore = Depends(get_execution_store),
+) -> ReportsStore:
+    """
+    Get the reports store instance.
+    """
+    # Use the same Redis store as tests for consistency
+    redis_store = RedisStore(
+        logger, "tests", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
+    )
+    return ReportsStore(test_store, execution_store, redis_store)
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],

@@ -579,7 +579,7 @@ class TestUser:
         password_plain_text = request.instance.valid_passwords[0]
         inviter_user = {
             "id": str(uuid.uuid4()),
-            "email": "inviter@example.com",
+            "email": "goricoaico+test_invite_user_success_inviter@gmail.com",
             "full_name": "John Inviter",
             "password": get_password_hash(password_plain_text),
             "disabled": False,
@@ -602,7 +602,7 @@ class TestUser:
         mock_send_invite_email.return_value = "INVITE123"
 
         # Send invite
-        invite_data = {"email": "newuser@example.com"}
+        invite_data = {"email": "goricoaico+test_invite_user_success_newuser@gmail.com"}
         invite_headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Authorization": f"Bearer {token}"
@@ -613,14 +613,14 @@ class TestUser:
 
         expected_response = {
             "message": "Invitation sent successfully",
-            "email": "newuser@example.com"
+            "email": "goricoaico+test_invite_user_success_newuser@gmail.com"
         }
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == expected_response
 
         # Verify the invite email was called with correct parameters
         mock_send_invite_email.assert_called_once_with(
-            email="newuser@example.com",
+            email="goricoaico+test_invite_user_success_newuser@gmail.com",
             inviter_name="John Inviter",
             group_id=group_id,
             invite_url=settings.INVITE_URL
@@ -630,7 +630,7 @@ class TestUser:
     def test_invite_user_unauthorized(self, request):
         client = request.instance.client
 
-        invite_data = {"email": "newuser@example.com"}
+        invite_data = {"email": "goricoaico+test_invite_user_success_newuser@gmail.com"}
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         response = client.post(
             f"{settings.API_V1_STR}/user/invite", data=invite_data, headers=headers
@@ -666,7 +666,7 @@ class TestUser:
         password_plain_text = request.instance.valid_passwords[0]
         inviter_user = {
             "id": str(uuid.uuid4()),
-            "email": "inviter@example.com",
+            "email": "goricoaico+test_invite_user_already_exists_inviter@gmail.com",
             "full_name": "John Inviter",
             "password": get_password_hash(password_plain_text),
             "disabled": False,
@@ -680,7 +680,7 @@ class TestUser:
         # Create the user to be invited (already exists)
         existing_user = {
             "id": str(uuid.uuid4()),
-            "email": "existing@example.com",
+            "email": "goricoaico+test_invite_user_already_exists_existing@gmail.com",
             "full_name": None,
             "password": get_password_hash(password_plain_text),
             "disabled": False,
@@ -700,7 +700,7 @@ class TestUser:
         token = login_response.json()["access_token"]
 
         # Try to invite existing user
-        invite_data = {"email": "existing@example.com"}
+        invite_data = {"email": "goricoaico+test_invite_user_already_exists_existing@gmail.com"}
         invite_headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Authorization": f"Bearer {token}"
@@ -725,8 +725,8 @@ class TestUser:
         # Create user without group
         password_plain_text = request.instance.valid_passwords[0]
         user_without_group = {
-            "id": str(uuid.uuid4()),
-            "email": "nogroup@example.com",
+            "id": (uuid.uuid4()),
+            "email": "goricoaico+test_invite_user_no_group@gmail.com",
             "full_name": "No Group User",
             "password": get_password_hash(password_plain_text),
             "disabled": False,
@@ -751,7 +751,7 @@ class TestUser:
         token = login_response.json()["access_token"]
 
         # Try to invite without group
-        invite_data = {"email": "newuser@example.com"}
+        invite_data = {"email": "goricoaico+test_invite_user_no_group_newuser@gmail.com"}
         invite_headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Authorization": f"Bearer {token}"
@@ -791,7 +791,7 @@ class TestUser:
         password_plain_text = request.instance.valid_passwords[0]
         inviter_user = {
             "id": str(uuid.uuid4()),
-            "email": "inviter@example.com",
+            "email": "goricoaico+test_invite_user_email_failed_to_send_inviter@gmail.com",
             "full_name": "John Inviter",
             "password": get_password_hash(password_plain_text),
             "disabled": False,
@@ -817,7 +817,7 @@ class TestUser:
         mock_send_invite_email.side_effect = email_exception
 
         # Try to send invite
-        invite_data = {"email": "newuser@example.com"}
+        invite_data = {"email": "goricoaico+test_invite_user_email_failed_to_send_inviter_newuser@gmail.com"}
         invite_headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Authorization": f"Bearer {token}"
@@ -1032,7 +1032,7 @@ class TestUser:
 
         # Try to update non-updatable fields
         update_data = {
-            "email": "new.email@example.com",
+            "email": "goricoaico+new.email@gmail.com",
             "group_id": str(uuid.uuid4()),
             "full_name": "New Name"  # This one should update
         }
@@ -1628,7 +1628,7 @@ class TestUser:
         app.dependency_overrides[deps.owner_or_admin_for_user_by_email] = lambda: User(**test_user)
 
         # Test getting non-existent user
-        response = client.get(f"{settings.API_V1_STR}/user/users/email/nonexistent@example.com")
+        response = client.get(f"{settings.API_V1_STR}/user/users/email/goricoaico+nonexistent@gmail.com")
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert response.json()["detail"] == "Not found"
 
@@ -1684,7 +1684,7 @@ class TestUser:
         # Create a test user
         user = {
             "id": str(uuid.uuid4()),
-            "email": "test@example.com",
+            "email": "goricoaico+test_get_user_by_id_authorization_self_access@gmail.com",
             "password": get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
             "disabled": False,
@@ -1713,7 +1713,7 @@ class TestUser:
         # Create two test users
         user1 = {
             "id": str(uuid.uuid4()),
-            "email": "user1@example.com",
+            "email": "goricoaico+test_get_user_by_id_authorization_other_user_denied_user1@gmail.com",
             "password": get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
             "disabled": False,
@@ -1722,7 +1722,7 @@ class TestUser:
         }
         user2 = {
             "id": str(uuid.uuid4()),
-            "email": "user2@example.com",
+            "email": "goricoaico+test_get_user_by_id_authorization_other_user_denied_user2@gmail.com",
             "password": get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
             "disabled": False,
@@ -1752,7 +1752,7 @@ class TestUser:
         # Create a regular user
         regular_user = {
             "id": str(uuid.uuid4()),
-            "email": "regular@example.com",
+            "email": "goricoaico+test_get_user_by_id_authorization_admin_access_regular@gmail.com",
             "password": get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
             "disabled": False,
@@ -1762,7 +1762,7 @@ class TestUser:
         # Create an admin user
         admin_user = {
             "id": str(uuid.uuid4()),
-            "email": "admin@example.com",
+            "email": "goricoaico+test_get_user_by_id_authorization_admin_access_admin@gmail.com",
             "password": get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
             "disabled": False,
@@ -2052,7 +2052,7 @@ class TestUserAdmin:
         # Create admin user and get token
         admin_user = {
             "id": str(uuid.uuid4()),
-            "email": "admin@example.com",
+            "email": "goricoaico+test_update_user_success_admin@gmail.com",
             "full_name": "Admin User",
             "password": get_password_hash(password_plain_text),
             "disabled": False,
@@ -2101,7 +2101,7 @@ class TestUserAdmin:
         # Create admin user and get token
         admin_user = {
             "id": str(uuid.uuid4()),
-            "email": "admin@example.com",
+            "email": "goricoaico+test_update_user_not_found_admin@gmail.com",
             "full_name": "Admin User",
             "password": get_password_hash(request.instance.valid_passwords[0]),
             "disabled": False,

@@ -200,6 +200,8 @@ app/
    - `GET /api/v1.0/user/users/email/{email}` - Get user by email (admin only)
    - `POST /api/v1.0/user/users` - Create new user (admin only)
    - `PUT /api/v1.0/user/users/{user_id}` - Update user (admin only)
+   - `POST /api/v1.0/user/users/invite` - Invite user to group
+
 
 3. **Tests:**  (api/api_v1/endpoints/tests.py)
    - `GET /api/v1.0/tests` - List all tests (paginated)
@@ -338,10 +340,75 @@ app/
    - POST /api/prompts/
    - PUT /api/prompts/{id}
 
-8. **Reports:**
-   - GET /api/reports/summary
-   - GET /api/reports/validation-status
-   - GET /api/reports/compliance
+8. **Reports:** (api/api_v1/endpoints/reports.py)
+   - `GET /api/v1.0/reports/summary` - Get summary report of tests and executions
+     - Response:
+       ```json
+       {
+         "test_metrics": {
+           "total_tests": number,
+           "active_tests": number,
+           "draft_tests": number,
+           "archived_tests": number,
+           "high_risk_tests": number,
+           "medium_risk_tests": number,
+           "low_risk_tests": number,
+           "safety_tests": number,
+           "accuracy_tests": number,
+           "compliance_tests": number
+         },
+         "execution_metrics": {
+           "total_executions": number,
+           "pending_validations": number,
+           "in_progress_validations": number,
+           "validated_executions": number,
+           "passed_validations": number,
+           "failed_validations": number,
+           "acceptance_rate": number,
+           "executions_last_7_days": number,
+           "executions_last_30_days": number
+         },
+         "generated_at": "string"
+       }
+       ```
+   
+   - `GET /api/v1.0/reports/trends` - Get execution trends over time
+     - Query Parameters:
+       - `days`: Number of days to analyze (1-365, default: 30)
+     - Response:
+       ```json
+       {
+         "trends": [
+           {
+             "date": "string",
+             "executions": number,
+             "validations": number,
+             "passed": number
+           }
+         ],
+         "period_days": number,
+         "generated_at": "string"
+       }
+       ```
+   
+   - `GET /api/v1.0/reports/performance` - Get performance metrics for tests
+     - Response:
+       ```json
+       {
+         "performance_metrics": [
+           {
+             "test_id": "string",
+             "test_name": "string",
+             "total_executions": number,
+             "success_rate": number,
+             "avg_response_time": number,
+             "avg_cost": number,
+             "last_executed": "string"
+           }
+         ],
+         "generated_at": "string"
+       }
+       ```
 
 ## Frontend AI Connector Design
 

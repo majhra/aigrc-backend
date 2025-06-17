@@ -70,14 +70,19 @@ class ExecutedTestStore:
             if key.startswith(self._test_to_executions_prefix):
                 continue
                 
-            execution = self.get(key)
-            if execution and str(execution.test_id) == test_id:
-                # Apply filters
-                if status and execution.validation_status != status:
-                    continue
-                if result and not any(v.status == result for v in execution.validations):
-                    continue
-                executions.append(execution)
+            try:
+                execution = self.get(key)
+                if execution and str(execution.test_id) == test_id:
+                    # Apply filters
+                    if status and execution.validation_status != status:
+                        continue
+                    if result and not any(v.status == result for v in execution.validations):
+                        continue
+                    executions.append(execution)
+            except Exception:
+                # Skip keys that can't be deserialized as ExecutedTestSchema
+                # This happens when the store contains other types of data (like tests)
+                continue
 
         # Sort by executed_at descending
         executions.sort(key=lambda x: x.executed_at, reverse=True)
