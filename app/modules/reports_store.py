@@ -4,7 +4,7 @@ from collections import defaultdict, Counter
 from uuid import UUID
 
 from app.modules.store_interface import StoreProtocol, LocalStore
-from app.modules.tests_store import MyTestStore
+from app.modules.tests_store import AITestStore
 from app.modules.executions_store import ExecutedTestStore
 from app.schemas.reports import (
     TestSummaryMetrics,
@@ -15,7 +15,7 @@ from app.schemas.reports import (
     ExecutionTestTrendsReport,
     PerformanceTestReport
 )
-from app.schemas import TestSchema, ExecutedTestSchema, User
+from app.schemas import AITestSchema, ExecutedTestSchema, User
 
 
 class ReportsStore:
@@ -23,7 +23,7 @@ class ReportsStore:
     
     def __init__(
         self,
-        tests_store: MyTestStore,
+        tests_store: AITestStore,
         executions_store: ExecutedTestStore,
         store: StoreProtocol = None
     ):
@@ -196,7 +196,7 @@ class ReportsStore:
             generated_at=now
         )
 
-    def _calculate_test_metrics(self, tests: List[TestSchema]) -> TestSummaryMetrics:
+    def _calculate_test_metrics(self, tests: List[AITestSchema]) -> TestSummaryMetrics:
         """Calculate test-related metrics"""
         total_tests = len(tests)
         
@@ -233,7 +233,7 @@ class ReportsStore:
 
     def _calculate_execution_metrics(
         self,
-        tests: List[TestSchema],
+        tests: List[AITestSchema],
         user: User
     ) -> ExecutionSummaryMetrics:
         """Calculate execution-related metrics"""

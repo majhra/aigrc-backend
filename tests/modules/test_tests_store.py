@@ -3,16 +3,16 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from app.modules.tests_store import MyTestStore
+from app.modules.tests_store import AITestStore
 from app.modules.store_interface import LocalStore
-from app.schemas import TestSchema, MyTestCreate, User, ConnectionConfig, ValidationConfig, ValidationCriterion
+from app.schemas import AITestSchema, AITestCreate, User, ConnectionConfig, ValidationConfig, ValidationCriterion
 
 
-class TestMyTestStore(unittest.TestCase):
+class TestAITestStore(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.mock_store = MagicMock(spec=LocalStore)
-        self.test_store = MyTestStore(self.mock_store)
+        self.test_store = AITestStore(self.mock_store)
         
         # Create test user
         self.test_user = User(
@@ -26,7 +26,7 @@ class TestMyTestStore(unittest.TestCase):
         )
         
         # Create test data
-        self.test_data = MyTestCreate(
+        self.test_data = AITestCreate(
             name="Test Test",
             description="A test test",
             prompt_template="Hello {name}",
@@ -57,7 +57,7 @@ class TestMyTestStore(unittest.TestCase):
     def test_get_success(self):
         """Test successful test retrieval by ID."""
         # Mock the underlying store to return test data
-        test_schema = TestSchema(
+        test_schema = AITestSchema(
             id=str(uuid4()),
             created_by=self.test_user.id,
             group_id=self.test_user.group,
@@ -92,7 +92,7 @@ class TestMyTestStore(unittest.TestCase):
         test_id = str(uuid4())
         test_keys = [test_id]
         
-        test_schema = TestSchema(
+        test_schema = AITestSchema(
             id=test_id,
             created_by=self.test_user.id,
             group_id=self.test_user.group,
@@ -117,7 +117,7 @@ class TestMyTestStore(unittest.TestCase):
         test_id = str(uuid4())
         test_keys = [test_id]
         
-        test_schema = TestSchema(
+        test_schema = AITestSchema(
             id=test_id,
             created_by=self.test_user.id,
             group_id=self.test_user.group,
@@ -142,7 +142,7 @@ class TestMyTestStore(unittest.TestCase):
         test_id = str(uuid4())
         test_keys = [test_id]
         
-        test_schema = TestSchema(
+        test_schema = AITestSchema(
             id=test_id,
             created_by=self.test_user.id,
             group_id=self.test_user.group,
@@ -166,7 +166,7 @@ class TestMyTestStore(unittest.TestCase):
         test_id = str(uuid4())
         test_keys = [test_id]
         
-        test_schema = TestSchema(
+        test_schema = AITestSchema(
             id=test_id,
             created_by=self.test_user.id,
             group_id=self.test_user.group,
@@ -190,7 +190,7 @@ class TestMyTestStore(unittest.TestCase):
         test_id = str(uuid4())
         test_keys = [test_id]
         
-        test_schema = TestSchema(
+        test_schema = AITestSchema(
             id=test_id,
             created_by=self.test_user.id,
             group_id=self.test_user.group,
@@ -221,7 +221,7 @@ class TestMyTestStore(unittest.TestCase):
         """Test test listing with pagination."""
         # Mock the store to return multiple keys
         test_keys = [f"test{i}" for i in range(5)]
-        test_schema = TestSchema(
+        test_schema = AITestSchema(
             id=str(uuid4()),
             created_by=self.test_user.id,
             group_id=self.test_user.group,
@@ -259,7 +259,7 @@ class TestMyTestStore(unittest.TestCase):
     def test_update_success(self):
         """Test successful test update."""
         # Mock the store to return existing test
-        existing_test = TestSchema(
+        existing_test = AITestSchema(
             id=str(uuid4()),
             created_by=self.test_user.id,
             group_id=self.test_user.group,
@@ -272,7 +272,7 @@ class TestMyTestStore(unittest.TestCase):
         
         update_data = self.test_data.model_dump()
         update_data["name"] = "Updated Test"
-        result = self.test_store.update(str(existing_test.id), MyTestCreate(**update_data))
+        result = self.test_store.update(str(existing_test.id), AITestCreate(**update_data))
         
         # Verify the store was called correctly
         self.mock_store.get.assert_called_once_with(str(existing_test.id))
@@ -291,14 +291,14 @@ class TestMyTestStore(unittest.TestCase):
         
         update_data = self.test_data.model_dump()
         update_data["name"] = "Updated Test"
-        result = self.test_store.update("non-existent-id", MyTestCreate(**update_data))
+        result = self.test_store.update("non-existent-id", AITestCreate(**update_data))
         
         self.assertIsNone(result)
 
     def test_delete_success(self):
         """Test successful test deletion."""
         # Mock the store to return existing test
-        existing_test = TestSchema(
+        existing_test = AITestSchema(
             id=str(uuid4()),
             created_by=self.test_user.id,
             group_id=self.test_user.group,
@@ -329,7 +329,7 @@ class TestMyTestStore(unittest.TestCase):
 
     def test_belongs_to_group_true(self):
         """Test belongs_to_group when test belongs to group."""
-        test_schema = TestSchema(
+        test_schema = AITestSchema(
             id=str(uuid4()),
             created_by=self.test_user.id,
             group_id=self.test_user.group,
@@ -345,7 +345,7 @@ class TestMyTestStore(unittest.TestCase):
 
     def test_belongs_to_group_false(self):
         """Test belongs_to_group when test doesn't belong to group."""
-        test_schema = TestSchema(
+        test_schema = AITestSchema(
             id=str(uuid4()),
             created_by=self.test_user.id,
             group_id=self.test_user.group,
@@ -373,7 +373,7 @@ class TestMyTestStore(unittest.TestCase):
         test_id = str(uuid4())
         test_keys = [test_id]
         
-        test_schema = TestSchema(
+        test_schema = AITestSchema(
             id=test_id,
             created_by=self.test_user.id,
             group_id=self.test_user.group,

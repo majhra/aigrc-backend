@@ -8,8 +8,8 @@ from pydantic import BaseModel
 from app.api import deps
 from app.core.config import settings
 from app.modules.store_interface import StoreProtocol, RedisStore
-from app.modules.tests_store import MyTestStore
-from app.schemas import TestSchema, MyTestCreate, TestList, User
+from app.modules.tests_store import AITestStore
+from app.schemas import AITestSchema, AITestCreate, TestList, User
 from app.schemas.executions import (
     ExecutedTestCreate, 
     ExecutedTestSchema, 
@@ -22,17 +22,17 @@ router = APIRouter()
 
 # New model for the combined test and execution response
 class TestExecutionDetail(BaseModel):
-    test: TestSchema
+    test: AITestSchema
     execution: ExecutedTestSchema
 
 class TestWithExecutions(BaseModel):
-    test: TestSchema
+    test: AITestSchema
     execution_ids: List[UUID]
 
 @router.get("", response_model=TestList)
 async def list_tests(
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: MyTestStore = Depends(deps.get_test_store),
+    test_store: AITestStore = Depends(deps.get_test_store),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     status: Optional[str] = Query(None, pattern="^(DRAFT|ACTIVE|ARCHIVED)$"),
@@ -72,7 +72,7 @@ async def list_tests(
 async def get_test(
     test_id: UUID,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: MyTestStore = Depends(deps.get_test_store),
+    test_store: AITestStore = Depends(deps.get_test_store),
     execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> TestWithExecutions:
@@ -105,26 +105,26 @@ async def get_test(
         execution_ids=[exec_id for exec_id in execution_ids]
     )
 
-@router.post("", response_model=TestSchema, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=AITestSchema, status_code=status.HTTP_201_CREATED)
 async def create_test(
-    test: MyTestCreate,
+    test: AITestCreate,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: MyTestStore = Depends(deps.get_test_store),
+    test_store: AITestStore = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),
-) -> TestSchema:
+) -> AITestSchema:
     """
     Create a new test.
     """
     return test_store.create(test, current_user)
 
-@router.put("/{test_id}", response_model=TestSchema)
+@router.put("/{test_id}", response_model=AITestSchema)
 async def update_test(
     test_id: UUID,
-    test: MyTestCreate,
+    test: AITestCreate,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: MyTestStore = Depends(deps.get_test_store),
+    test_store: AITestStore = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),
-) -> TestSchema:
+) -> AITestSchema:
     """
     Update an existing test.
     Users can only update tests from their own group unless they are admin.
@@ -156,7 +156,7 @@ async def update_test(
 async def delete_test(
     test_id: UUID,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: MyTestStore = Depends(deps.get_test_store),
+    test_store: AITestStore = Depends(deps.get_test_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> None:
     """
@@ -189,7 +189,7 @@ async def execute_test(
     test_id: UUID,
     execution: ExecutedTestCreate,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: MyTestStore = Depends(deps.get_test_store),
+    test_store: AITestStore = Depends(deps.get_test_store),
     execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> ExecutedTestSchema:
@@ -265,7 +265,7 @@ async def execute_test(
         # Update test's last run time and latest execution
         test_store.update(
             str(test_id),
-            MyTestCreate(
+            AITestCreate(
                 name=test.name,
                 description=test.description,
                 prompt_template=test.prompt_template,
@@ -316,7 +316,7 @@ async def validate_execution(
     execution_id: UUID,
     validation: ValidationEvent,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: MyTestStore = Depends(deps.get_test_store),
+    test_store: AITestStore = Depends(deps.get_test_store),
     execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> ExecutedTestSchema:
@@ -389,7 +389,7 @@ async def validate_execution(
     execution_id: UUID,
     validation: ValidationEvent,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: MyTestStore = Depends(deps.get_test_store),
+    test_store: AITestStore = Depends(deps.get_test_store),
     execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> ExecutedTestSchema:
@@ -460,7 +460,7 @@ async def get_test_execution(
     test_id: UUID,
     execution_id: UUID,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    test_store: MyTestStore = Depends(deps.get_test_store),
+    test_store: AITestStore = Depends(deps.get_test_store),
     execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
     logger: deps.TLogger = Depends(deps.get_logger),
 ) -> TestExecutionDetail:

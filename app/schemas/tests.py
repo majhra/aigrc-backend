@@ -47,7 +47,7 @@ class ValidationConfig(BaseModel):
     validator_type: str = Field(..., pattern="^(HUMAN|AI|RULE_BASED|HYBRID)$")
     validation_criteria: List[ValidationCriterion]
 
-class MyTestCreate(BaseModel):
+class AITestCreate(BaseModel):
     name: str
     description: str | None = None
     prompt_template: str | None = None
@@ -58,10 +58,10 @@ class MyTestCreate(BaseModel):
     risk_level: str = Field(..., pattern="^(LOW|MEDIUM|HIGH)$")
     status: str = Field(..., pattern="^(DRAFT|ACTIVE|ARCHIVED)$")
 
-class TestUpdate(MyTestCreate):
+class TestUpdate(AITestCreate):
     pass
 
-class TestSchema(MyTestCreate):
+class AITestSchema(AITestCreate):
     id: UUID
     created_by: UUID
     group_id: Optional[Union[str, UUID]] = None  # Owner of the test, optional for backward compatibility
@@ -78,7 +78,8 @@ class TestSchema(MyTestCreate):
         return str(v)
 
 class TestList(BaseModel):
-    items: List[TestSchema]
+    """List of tests with pagination info"""
+    items: List[AITestSchema]
     total: int
     page: int
     limit: int

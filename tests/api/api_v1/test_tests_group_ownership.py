@@ -4,8 +4,8 @@ from uuid import uuid4
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from app.schemas import User, MyTestCreate, ConnectionConfig, ValidationConfig, ValidationCriterion
-from app.modules.tests_store import MyTestStore
+from app.schemas import User, AITestCreate, ConnectionConfig, ValidationConfig, ValidationCriterion
+from app.modules.tests_store import AITestStore
 from app.modules.user_store import UserStore
 from app.modules.group_store import GroupStore
 from app.modules.store_interface import LocalStore
@@ -19,7 +19,7 @@ class TestTestsGroupOwnership:
         """Set up test fixtures."""
         self.user_store = UserStore(LocalStore())
         self.group_store = GroupStore(LocalStore())
-        self.test_store = MyTestStore(LocalStore())
+        self.test_store = AITestStore(LocalStore())
         
         # Create test groups
         from app.schemas import GroupCreate
@@ -67,7 +67,7 @@ class TestTestsGroupOwnership:
         self.user_store.create(self.admin_user, str(self.group1.id))
         
         # Create test data
-        self.test_data = MyTestCreate(
+        self.test_data = AITestCreate(
             name="Test Test",
             description="A test test",
             prompt_template="Hello {name}",
@@ -106,7 +106,7 @@ class TestTestsGroupOwnership:
         
         test_data2 = self.test_data.model_dump()
         test_data2["name"] = "Test 2"
-        test2 = self.test_store.create(MyTestCreate(**test_data2), self.user2)
+        test2 = self.test_store.create(AITestCreate(**test_data2), self.user2)
         
         # List tests for user1 (should only see group1 tests)
         tests, total = self.test_store.list(group_id=str(self.group1.id))
@@ -138,7 +138,7 @@ class TestTestsGroupOwnership:
         
         test_data2 = self.test_data.model_dump()
         test_data2["name"] = "Test 2"
-        test2 = self.test_store.create(MyTestCreate(**test_data2), self.user2)
+        test2 = self.test_store.create(AITestCreate(**test_data2), self.user2)
         
         # Get tests for group1
         group1_tests = self.test_store.get_tests_by_group(str(self.group1.id))
@@ -157,7 +157,7 @@ class TestTestsGroupOwnership:
         # Update the test
         update_data = self.test_data.model_dump()
         update_data["name"] = "Updated Test"
-        updated_test = self.test_store.update(str(test.id), MyTestCreate(**update_data))
+        updated_test = self.test_store.update(str(test.id), AITestCreate(**update_data))
         
         assert updated_test.group_id == str(self.group1.id)
         assert updated_test.name == "Updated Test"
@@ -183,11 +183,11 @@ class TestTestsGroupOwnership:
         
         test_data2 = self.test_data.model_dump()
         test_data2["name"] = "Test 2"
-        test2 = self.test_store.create(MyTestCreate(**test_data2), self.user1)
+        test2 = self.test_store.create(AITestCreate(**test_data2), self.user1)
         
         test_data3 = self.test_data.model_dump()
         test_data3["name"] = "Test 3"
-        test3 = self.test_store.create(MyTestCreate(**test_data3), self.user1)
+        test3 = self.test_store.create(AITestCreate(**test_data3), self.user1)
         
         # All tests should belong to group1
         assert test1.group_id == str(self.group1.id)
@@ -207,7 +207,7 @@ class TestTestsGroupOwnership:
         test_data2 = self.test_data.model_dump()
         test_data2["name"] = "Draft Test"
         test_data2["status"] = "DRAFT"
-        test2 = self.test_store.create(MyTestCreate(**test_data2), self.user1)
+        test2 = self.test_store.create(AITestCreate(**test_data2), self.user1)
         
         # Filter by group and status
         tests, total = self.test_store.list(

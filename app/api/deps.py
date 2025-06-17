@@ -8,7 +8,7 @@ from starlette.status import HTTP_403_FORBIDDEN
 from app.api.utils import get_logger, get_user_by_email
 from app.core.config import settings
 from app.modules.store_interface import RedisStore, StoreProtocol
-from app.modules.tests_store import MyTestStore
+from app.modules.tests_store import AITestStore
 from app.modules.tlogger import TLogger
 from app.schemas import TokenData, User
 from app.modules.executions_store import ExecutedTestStore
@@ -41,11 +41,11 @@ def get_group_store(logger: TLogger = Depends(get_logger)) -> GroupStore:
     return GroupStore(redis_store)
 
 
-def get_test_store(logger: TLogger = Depends(get_logger)) -> MyTestStore:
+def get_test_store(logger: TLogger = Depends(get_logger)) -> AITestStore:
     """
     Get the redis store for tests.
     """
-    return MyTestStore(RedisStore(
+    return AITestStore(RedisStore(
         logger, "tests", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
     ))
 
@@ -61,7 +61,7 @@ def get_execution_store(logger: TLogger = Depends(get_logger)) -> ExecutedTestSt
 
 def get_reports_store(
     logger: TLogger = Depends(get_logger),
-    test_store: MyTestStore = Depends(get_test_store),
+    test_store: AITestStore = Depends(get_test_store),
     execution_store: ExecutedTestStore = Depends(get_execution_store),
 ) -> ReportsStore:
     """

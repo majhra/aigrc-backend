@@ -3,13 +3,13 @@ from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
 from app.modules.store_interface import LocalStore, StoreProtocol
-from app.schemas import TestSchema, MyTestCreate, User
+from app.schemas import AITestSchema, AITestCreate, User
 
-class MyTestStore:
+class AITestStore:
     def __init__(self, store: StoreProtocol = None):
         self._store = store or LocalStore()
 
-    def get(self, test_id: str) -> Optional[TestSchema]:
+    def get(self, test_id: str) -> Optional[AITestSchema]:
         data = self._store.get(test_id)
         if not data:
             return None
@@ -19,7 +19,7 @@ class MyTestStore:
             data['group_id'] = None
         
         try:
-            return TestSchema(**data)
+            return AITestSchema(**data)
         except Exception as e:
             return None
 
@@ -31,7 +31,7 @@ class MyTestStore:
         risk_level: Optional[str] = None,
         search: Optional[str] = None,
         group_id: Optional[str] = None,
-    ) -> tuple[List[TestSchema], int]:
+    ) -> tuple[List[AITestSchema], int]:
         # Get all keys
         keys = self._store.keys()
 
@@ -71,11 +71,11 @@ class MyTestStore:
 
         return paginated_tests, total
 
-    def create(self, test: MyTestCreate, user: User) -> TestSchema:
+    def create(self, test: AITestCreate, user: User) -> AITestSchema:
         now = datetime.now(timezone.utc)
         test_id = str(uuid4())
         
-        new_test = TestSchema(
+        new_test = AITestSchema(
             id=test_id,
             created_by=user.id,
             group_id=user.group,
@@ -87,15 +87,15 @@ class MyTestStore:
         self._store.put(test_id, new_test.model_dump())
         return new_test
 
-    def update(self, test_id: str, test: MyTestCreate) -> Optional[TestSchema]:
+    def update(self, test_id: str, test: AITestCreate) -> Optional[AITestSchema]:
         existing_data = self._store.get(test_id)
         if not existing_data:
             return None
             
-        existing_test = TestSchema(**existing_data)
+        existing_test = AITestSchema(**existing_data)
         now = datetime.now(timezone.utc)
         
-        updated_test = TestSchema(
+        updated_test = AITestSchema(
             id=test_id,
             created_by=existing_test.created_by,
             group_id=existing_test.group_id,
@@ -118,7 +118,7 @@ class MyTestStore:
             return False
         return str(test.group_id) == str(group_id)
 
-    def get_tests_by_group(self, group_id: str) -> List[TestSchema]:
+    def get_tests_by_group(self, group_id: str) -> List[AITestSchema]:
         """Get all tests belonging to a specific group."""
         tests, _ = self.list(group_id=group_id, page=1, limit=1000)  # Get all tests for the group
         return tests

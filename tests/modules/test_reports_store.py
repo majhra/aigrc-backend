@@ -4,12 +4,12 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from app.modules.reports_store import ReportsStore
-from app.modules.tests_store import MyTestStore
+from app.modules.tests_store import AITestStore
 from app.modules.executions_store import ExecutedTestStore
 from app.modules.group_store import GroupStore
 from app.modules.store_interface import LocalStore
 from app.schemas import (
-    TestSchema, MyTestCreate, User, ConnectionConfig, ValidationConfig, ValidationCriterion,
+    AITestSchema, AITestCreate, User, ConnectionConfig, ValidationConfig, ValidationCriterion,
     ExecutedTestSchema, ExecutedTestCreate, ValidationEvent, ExecutionEnvironment, PerformanceMetrics, TokenUsage,
     Group, GroupCreate
 )
@@ -25,7 +25,7 @@ class TestReportsStore(unittest.TestCase):
         """Set up test fixtures."""
         # Use fresh stores for each test to avoid pollution
         self.store = LocalStore()
-        self.tests_store = MyTestStore(self.store)
+        self.tests_store = AITestStore(self.store)
         self.executions_store = ExecutedTestStore(self.store)
         self.group_store = GroupStore(self.store)
         self.reports_store = ReportsStore(
@@ -46,7 +46,7 @@ class TestReportsStore(unittest.TestCase):
         )
         
         # Create test data
-        self.test_data = MyTestCreate(
+        self.test_data = AITestCreate(
             name="Test Test",
             description="A test test",
             prompt_template="Hello {name}",

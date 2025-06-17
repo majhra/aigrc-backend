@@ -4,8 +4,8 @@ from uuid import uuid4
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from app.schemas import User, MyTestCreate, ConnectionConfig, ValidationConfig, ValidationCriterion
-from app.modules.tests_store import MyTestStore
+from app.schemas import User, AITestCreate, ConnectionConfig, ValidationConfig, ValidationCriterion
+from app.modules.tests_store import AITestStore
 from app.modules.user_store import UserStore
 from app.modules.group_store import GroupStore
 from app.modules.store_interface import LocalStore
@@ -20,7 +20,7 @@ class TestTestsAPIGroupOwnership:
         """Set up test fixtures."""
         self.user_store = UserStore(LocalStore())
         self.group_store = GroupStore(LocalStore())
-        self.test_store = MyTestStore(LocalStore())
+        self.test_store = AITestStore(LocalStore())
         
         # Create test groups
         from app.schemas import GroupCreate
@@ -68,7 +68,7 @@ class TestTestsAPIGroupOwnership:
         self.user_store.create(self.admin_user, str(self.group1.id))
         
         # Create test data
-        self.test_data = MyTestCreate(
+        self.test_data = AITestCreate(
             name="Test Test",
             description="A test test",
             prompt_template="Hello {name}",
@@ -108,7 +108,7 @@ class TestTestsAPIGroupOwnership:
         
         test_data2 = self.test_data.model_dump()
         test_data2["name"] = "Test 2"
-        test2 = self.test_store.create(MyTestCreate(**test_data2), self.user2)
+        test2 = self.test_store.create(AITestCreate(**test_data2), self.user2)
         
         # Mock user1 as current user
         app.dependency_overrides[deps.get_current_active_user] = lambda: self.user1
@@ -147,7 +147,7 @@ class TestTestsAPIGroupOwnership:
         
         test_data2 = self.test_data.model_dump()
         test_data2["name"] = "Test 2"
-        test2 = self.test_store.create(MyTestCreate(**test_data2), self.user2)
+        test2 = self.test_store.create(AITestCreate(**test_data2), self.user2)
         
         # Mock admin user as current user
         app.dependency_overrides[deps.get_current_active_user] = lambda: self.admin_user

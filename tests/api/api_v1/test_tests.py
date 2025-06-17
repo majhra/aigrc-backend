@@ -6,12 +6,12 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.tests_store import MyTestStore
+from app.modules.tests_store import AITestStore
 from app.modules.executions_store import ExecutedTestStore
 from app.modules.user_store import UserStore
 from app.modules.group_store import GroupStore
 from app.modules.store_interface import LocalStore
-from app.schemas import MyTestCreate, User, ExecutedTestCreate, ConnectionConfig, ValidationConfig, ValidationCriterion, GroupCreate
+from app.schemas import AITestCreate, User, ExecutedTestCreate, ConnectionConfig, ValidationConfig, ValidationCriterion, GroupCreate
 
 from app.api import deps
 from app.core.config import settings
@@ -19,7 +19,7 @@ from app.core.config import settings
 
 class TestTests:
     # Test data
-    TEST_DATA = MyTestCreate(
+    TEST_DATA = AITestCreate(
         name="Test AI Response",
         description="Test the AI's response to a simple prompt",
         prompt_template="What is 2+2?",
@@ -49,7 +49,7 @@ class TestTests:
     def setup_method(self, method):
         """Setup test environment before each test"""
         self.client = TestClient(app)
-        self.test_store = MyTestStore(LocalStore())
+        self.test_store = AITestStore(LocalStore())
         self.execution_store = ExecutedTestStore(LocalStore())
         self.user_store = UserStore(LocalStore())
         self.group_store = GroupStore(LocalStore())

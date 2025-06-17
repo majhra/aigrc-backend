@@ -6,12 +6,12 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.tests_store import MyTestStore
+from app.modules.tests_store import AITestStore
 from app.modules.executions_store import ExecutedTestStore
 from app.modules.group_store import GroupStore
 from app.modules.store_interface import LocalStore
 from app.schemas import (
-    MyTestCreate, User, ExecutedTestCreate, ConnectionConfig, ValidationConfig, ValidationCriterion,
+    AITestCreate, User, ExecutedTestCreate, ConnectionConfig, ValidationConfig, ValidationCriterion,
     ExecutionEnvironment, PerformanceMetrics, TokenUsage, GroupCreate
 )
 
@@ -21,7 +21,7 @@ from app.core.config import settings
 
 class TestReports:
     # Test data
-    TEST_DATA = MyTestCreate(
+    TEST_DATA = AITestCreate(
         name="Test AI Response",
         description="Test the AI's response to a simple prompt",
         prompt_template="What is 2+2?",
@@ -72,13 +72,13 @@ class TestReports:
         
         # Mock the reports store dependency to use LocalStore
         from app.modules.reports_store import ReportsStore
-        from app.modules.tests_store import MyTestStore
+        from app.modules.tests_store import AITestStore
         from app.modules.executions_store import ExecutedTestStore
         from app.modules.store_interface import LocalStore
         
         def mock_get_reports_store():
             store = LocalStore()
-            tests_store = MyTestStore(store)
+            tests_store = AITestStore(store)
             executions_store = ExecutedTestStore(store)
             return ReportsStore(tests_store, executions_store, store)
         
