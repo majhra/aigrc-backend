@@ -3,7 +3,13 @@ from typing import Dict, List, Optional, Tuple, Set
 from uuid import UUID, uuid4
 
 from app.modules.store_interface import LocalStore, StoreProtocol
-from app.schemas.executions import ExecutedTestSchema, ExecutedTestCreate, ValidationEvent
+from app.schemas.executions import (
+    ExecutedTestSchema, 
+    ExecutedTestCreate, 
+    ValidationEvent,
+    PerformanceMetrics,
+    ErrorDetails
+)
 from app.schemas import User
 
 class ExecutedTestStore:
@@ -47,7 +53,21 @@ class ExecutedTestStore:
         data = self._store.get(execution_id)
         if not data:
             return None
-        return ExecutedTestSchema(**data)
+        
+        # Fix None values for required string fields
+        if data.get('prompt') is None:
+            data['prompt'] = ""
+        if data.get('response') is None:
+            data['response'] = ""
+        
+        try:
+            return ExecutedTestSchema(**data)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to create ExecutedTestSchema from data: {e}")
+            logger.error(f"Data that caused the error: {data}")
+            raise
 
     def list(
         self,
@@ -108,6 +128,24 @@ class ExecutedTestStore:
         now = datetime.now(timezone.utc)
         execution_id = str(uuid4())
         
+        # Convert benchmarks dict to PerformanceMetrics object if provided
+        benchmarks_obj = None
+        if benchmarks:
+            if isinstance(benchmarks, dict):
+                benchmarks_obj = PerformanceMetrics(**benchmarks)
+            else:
+                # Already a PerformanceMetrics object
+                benchmarks_obj = benchmarks
+        
+        # Convert error dict to ErrorDetails object if provided
+        error_obj = None
+        if error:
+            if isinstance(error, dict):
+                error_obj = ErrorDetails(**error)
+            else:
+                # Already an ErrorDetails object
+                error_obj = error
+        
         new_execution = ExecutedTestSchema(
             id=execution_id,
             test_id=test_id,
@@ -117,8 +155,8 @@ class ExecutedTestStore:
             input_variables=execution.input_variables,
             prompt=prompt,
             response=response,
-            benchmarks=benchmarks,
-            error=error,
+            benchmarks=benchmarks_obj,
+            error=error_obj,
             validation_status="PENDING",
             validations=[]
         )

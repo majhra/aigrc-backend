@@ -445,6 +445,40 @@ class TestTests:
         
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
+    def test_execute_test_with_none_prompt_template(self):
+        """Test executing a test with None prompt_template"""
+        # Create a test with None prompt_template
+        test_data = self.TEST_DATA.model_dump()
+        test_data["prompt_template"] = None
+        
+        create_response = self.client.post(
+            f"{settings.API_V1_STR}/tests",
+            json=test_data
+        )
+        test_id = create_response.json()["id"]
+
+        # Execute the test with empty JSON
+        execution_data = ExecutedTestCreate()
+        
+        response = self.client.post(
+            f"{settings.API_V1_STR}/tests/{test_id}/execute",
+            json=execution_data.model_dump()
+        )
+        
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        
+        # Verify response structure
+        assert UUID(data["id"])  # Valid UUID
+        assert data["test_id"] == test_id
+        assert data["executed_by"] == str(self.TEST_USER.id)
+        assert data["validation_status"] == "PENDING"
+        assert data["prompt"] == ""  # Should be empty string when prompt_template is None
+        assert data["response"] == "This is a mock response. AI endpoint integration pending."
+        assert data["benchmarks"] is not None
+        assert data["error"] is None
+        assert len(data["validations"]) == 0
+
     def test_execute_test_with_validation(self):
         """Test executing a test and adding validation"""
         # First create and execute a test

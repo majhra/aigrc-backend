@@ -222,7 +222,7 @@ async def execute_test(
 
     try:
         # Use prompt template directly without variable formatting
-        prompt = test.prompt_template
+        prompt = test.prompt_template or ""
         logger.info(f"Using prompt for test {test_id}: {prompt}")
 
         # TODO: Implement actual AI endpoint call
@@ -291,7 +291,7 @@ async def execute_test(
                 test_id=str(test_id),
                 execution=execution,
                 user=current_user,
-                prompt=prompt if 'prompt' in locals() else test.prompt_template,
+                prompt=prompt if 'prompt' in locals() else (test.prompt_template or ""),
                 response="",
                 error={
                     "code": "EXECUTION_ERROR",
