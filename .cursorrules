@@ -25,3 +25,5 @@ pytest runs on Windows, cwd is D:\Documents\Biz\AI\MVP\backend, run pytest direc
 - Explicit over Implicit: Favor explicit code that clearly communicates its intent over implicit, overly concise code.
 - Reusable Components: Develop reusable functions and classes, favoring composition over inheritance.
 - Thorough Unit Testing: Aim for high test coverage (90% or higher) using `pytest`. Test both common cases and edge cases.
+- Any testing domains should use galdren.com
+- Any test emails should be in the format goricoaico+{test name}@gmail.com

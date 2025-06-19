@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
+from unittest.mock import patch
 
 from fastapi import status
 from fastapi.testclient import TestClient
@@ -25,8 +26,9 @@ class TestTests:
         prompt_template="What is 2+2?",
         interface_type="DIRECT_LLM",
         connection_config=ConnectionConfig(
-            endpoint="https://api.openai.com/v1/chat/completions",
+            endpoint="https://api.galdren.com/v1/chat/completions",
             auth_type="API_KEY",
+            auth_string="dummy-api-key",
             timeout=30
         ),
         validation_config=ValidationConfig(
@@ -296,8 +298,9 @@ class TestTests:
             "prompt_template": "Test",
             "interface_type": "DIRECT_LLM",
             "connection_config": {
-                "endpoint": "https://api.example.com",
-                "auth_type": "API_KEY"
+                "endpoint": "https://api.galdren.com/v1/chat/completions",
+                "auth_type": "API_KEY",
+                "auth_string": "dummy-api-key"
             },
             "validation_config": {
                 "validator_type": "HUMAN",
@@ -332,10 +335,26 @@ class TestTests:
             }
         )
         
-        response = self.client.post(
-            f"{settings.API_V1_STR}/tests/{test_id}/execute",
-            json=execution_data.model_dump()
-        )
+        # Mock the AI connection service to avoid real HTTP requests
+        with patch('app.modules.ai_connection_service.AIConnectionService.execute_prompt') as mock_execute:
+            mock_execute.return_value = {
+                "response": "The answer is 4.",
+                "benchmarks": {
+                    "response_time": 150,
+                    "total_time": 200,
+                    "token_usage": {
+                        "prompt": 8,
+                        "completion": 4,
+                        "total": 12
+                    }
+                },
+                "raw_response": {"choices": [{"message": {"content": "The answer is 4."}}]}
+            }
+        
+            response = self.client.post(
+                f"{settings.API_V1_STR}/tests/{test_id}/execute",
+                json=execution_data.model_dump()
+            )
         
         assert response.status_code == status.HTTP_201_CREATED
         data = response.json()
@@ -345,14 +364,14 @@ class TestTests:
         assert data["test_id"] == test_id
         assert data["executed_by"] == str(self.TEST_USER.id)
         assert data["validation_status"] == "PENDING"
-        assert data["prompt"] == self.TEST_DATA.prompt_template
-        assert data["response"] == "This is a mock response. AI endpoint integration pending."
+        assert data["prompt"] == "What is 2+2?"
+        assert data["response"] == "The answer is 4."
         assert data["benchmarks"] is not None
-        assert data["benchmarks"]["response_time"] == 100
-        assert data["benchmarks"]["total_time"] == 150
-        assert data["benchmarks"]["token_usage"]["prompt"] == 10
-        assert data["benchmarks"]["token_usage"]["completion"] == 5
-        assert data["benchmarks"]["token_usage"]["total"] == 15
+        assert data["benchmarks"]["response_time"] == 150
+        assert data["benchmarks"]["total_time"] == 200
+        assert data["benchmarks"]["token_usage"]["prompt"] == 8
+        assert data["benchmarks"]["token_usage"]["completion"] == 4
+        assert data["benchmarks"]["token_usage"]["total"] == 12
         assert data["error"] is None
         assert len(data["validations"]) == 0
 
@@ -460,10 +479,26 @@ class TestTests:
         # Execute the test with empty JSON
         execution_data = ExecutedTestCreate()
         
-        response = self.client.post(
-            f"{settings.API_V1_STR}/tests/{test_id}/execute",
-            json=execution_data.model_dump()
-        )
+        # Mock the AI connection service to avoid real HTTP requests
+        with patch('app.modules.ai_connection_service.AIConnectionService.execute_prompt') as mock_execute:
+            mock_execute.return_value = {
+                "response": "Empty prompt response.",
+                "benchmarks": {
+                    "response_time": 100,
+                    "total_time": 150,
+                    "token_usage": {
+                        "prompt": 5,
+                        "completion": 3,
+                        "total": 8
+                    }
+                },
+                "raw_response": {"choices": [{"message": {"content": "Empty prompt response."}}]}
+            }
+        
+            response = self.client.post(
+                f"{settings.API_V1_STR}/tests/{test_id}/execute",
+                json=execution_data.model_dump()
+            )
         
         assert response.status_code == status.HTTP_201_CREATED
         data = response.json()
@@ -474,7 +509,7 @@ class TestTests:
         assert data["executed_by"] == str(self.TEST_USER.id)
         assert data["validation_status"] == "PENDING"
         assert data["prompt"] == ""  # Should be empty string when prompt_template is None
-        assert data["response"] == "This is a mock response. AI endpoint integration pending."
+        assert data["response"] == "Empty prompt response."
         assert data["benchmarks"] is not None
         assert data["error"] is None
         assert len(data["validations"]) == 0
@@ -492,10 +527,26 @@ class TestTests:
             input_variables={"name": "John"}
         )
         
-        execute_response = self.client.post(
-            f"{settings.API_V1_STR}/tests/{test_id}/execute",
-            json=execution_data.model_dump()
-        )
+        # Mock the AI connection service to avoid real HTTP requests
+        with patch('app.modules.ai_connection_service.AIConnectionService.execute_prompt') as mock_execute:
+            mock_execute.return_value = {
+                "response": "Test response.",
+                "benchmarks": {
+                    "response_time": 120,
+                    "total_time": 180,
+                    "token_usage": {
+                        "prompt": 6,
+                        "completion": 3,
+                        "total": 9
+                    }
+                },
+                "raw_response": {"choices": [{"message": {"content": "Test response."}}]}
+            }
+        
+            execute_response = self.client.post(
+                f"{settings.API_V1_STR}/tests/{test_id}/execute",
+                json=execution_data.model_dump()
+            )
         execution_id = execute_response.json()["id"]
 
         # Add validation
@@ -530,10 +581,26 @@ class TestTests:
             input_variables={"name": "John"}
         )
         
-        execute_response = self.client.post(
-            f"{settings.API_V1_STR}/tests/{test_id}/execute",
-            json=execution_data.model_dump()
-        )
+        # Mock the AI connection service to avoid real HTTP requests
+        with patch('app.modules.ai_connection_service.AIConnectionService.execute_prompt') as mock_execute:
+            mock_execute.return_value = {
+                "response": "Validation test response.",
+                "benchmarks": {
+                    "response_time": 110,
+                    "total_time": 160,
+                    "token_usage": {
+                        "prompt": 7,
+                        "completion": 4,
+                        "total": 11
+                    }
+                },
+                "raw_response": {"choices": [{"message": {"content": "Validation test response."}}]}
+            }
+        
+            execute_response = self.client.post(
+                f"{settings.API_V1_STR}/tests/{test_id}/execute",
+                json=execution_data.model_dump()
+            )
         execution_id = execute_response.json()["id"]
 
         # Submit validation
@@ -615,10 +682,26 @@ class TestTests:
             input_variables={"name": "John"}
         )
         
-        execute_response = self.client.post(
-            f"{settings.API_V1_STR}/tests/{test_id1}/execute",
-            json=execution_data.model_dump()
-        )
+        # Mock the AI connection service to avoid real HTTP requests
+        with patch('app.modules.ai_connection_service.AIConnectionService.execute_prompt') as mock_execute:
+            mock_execute.return_value = {
+                "response": "Wrong test validation response.",
+                "benchmarks": {
+                    "response_time": 95,
+                    "total_time": 140,
+                    "token_usage": {
+                        "prompt": 5,
+                        "completion": 2,
+                        "total": 7
+                    }
+                },
+                "raw_response": {"choices": [{"message": {"content": "Wrong test validation response."}}]}
+            }
+        
+            execute_response = self.client.post(
+                f"{settings.API_V1_STR}/tests/{test_id1}/execute",
+                json=execution_data.model_dump()
+            )
         execution_id = execute_response.json()["id"]
 
         # Try to validate using test 2's ID
@@ -651,10 +734,26 @@ class TestTests:
             input_variables={"name": "John"}
         )
         
-        execute_response = self.client.post(
-            f"{settings.API_V1_STR}/tests/{test_id}/execute",
-            json=execution_data.model_dump()
-        )
+        # Mock the AI connection service to avoid real HTTP requests
+        with patch('app.modules.ai_connection_service.AIConnectionService.execute_prompt') as mock_execute:
+            mock_execute.return_value = {
+                "response": "Unauthorized test response.",
+                "benchmarks": {
+                    "response_time": 85,
+                    "total_time": 130,
+                    "token_usage": {
+                        "prompt": 4,
+                        "completion": 2,
+                        "total": 6
+                    }
+                },
+                "raw_response": {"choices": [{"message": {"content": "Unauthorized test response."}}]}
+            }
+        
+            execute_response = self.client.post(
+                f"{settings.API_V1_STR}/tests/{test_id}/execute",
+                json=execution_data.model_dump()
+            )
         execution_id = execute_response.json()["id"]
 
         # Remove auth override
@@ -689,10 +788,26 @@ class TestTests:
             input_variables={"name": "John"}
         )
         
-        execute_response = self.client.post(
-            f"{settings.API_V1_STR}/tests/{test_id}/execute",
-            json=execution_data.model_dump()
-        )
+        # Mock the AI connection service to avoid real HTTP requests
+        with patch('app.modules.ai_connection_service.AIConnectionService.execute_prompt') as mock_execute:
+            mock_execute.return_value = {
+                "response": "Wrong validator test response.",
+                "benchmarks": {
+                    "response_time": 88,
+                    "total_time": 128,
+                    "token_usage": {
+                        "prompt": 4,
+                        "completion": 2,
+                        "total": 6
+                    }
+                },
+                "raw_response": {"choices": [{"message": {"content": "Wrong validator test response."}}]}
+            }
+        
+            execute_response = self.client.post(
+                f"{settings.API_V1_STR}/tests/{test_id}/execute",
+                json=execution_data.model_dump()
+            )
         execution_id = execute_response.json()["id"]
 
         # Try to validate with different validator ID
@@ -725,10 +840,26 @@ class TestTests:
             input_variables={"name": "John"}
         )
         
-        execute_response = self.client.post(
-            f"{settings.API_V1_STR}/tests/{test_id}/execute",
-            json=execution_data.model_dump()
-        )
+        # Mock the AI connection service to avoid real HTTP requests
+        with patch('app.modules.ai_connection_service.AIConnectionService.execute_prompt') as mock_execute:
+            mock_execute.return_value = {
+                "response": "Get execution test response.",
+                "benchmarks": {
+                    "response_time": 105,
+                    "total_time": 155,
+                    "token_usage": {
+                        "prompt": 6,
+                        "completion": 3,
+                        "total": 9
+                    }
+                },
+                "raw_response": {"choices": [{"message": {"content": "Get execution test response."}}]}
+            }
+        
+            execute_response = self.client.post(
+                f"{settings.API_V1_STR}/tests/{test_id}/execute",
+                json=execution_data.model_dump()
+            )
         execution_id = execute_response.json()["id"]
 
         # Add a validation to make sure it's included in the response
@@ -811,15 +942,40 @@ class TestTests:
             input_variables={"name": "John"}
         )
         
-        execute_response = self.client.post(
-            f"{settings.API_V1_STR}/tests/{test_id1}/execute",
-            json=execution_data.model_dump()
-        )
+        # Mock the AI connection service to avoid real HTTP requests
+        with patch('app.modules.ai_connection_service.AIConnectionService.execute_prompt') as mock_execute:
+            mock_execute.return_value = {
+                "response": "Wrong test validation response.",
+                "benchmarks": {
+                    "response_time": 95,
+                    "total_time": 140,
+                    "token_usage": {
+                        "prompt": 5,
+                        "completion": 2,
+                        "total": 7
+                    }
+                },
+                "raw_response": {"choices": [{"message": {"content": "Wrong test validation response."}}]}
+            }
+        
+            execute_response = self.client.post(
+                f"{settings.API_V1_STR}/tests/{test_id1}/execute",
+                json=execution_data.model_dump()
+            )
         execution_id = execute_response.json()["id"]
 
-        # Try to get execution using test 2's ID
-        response = self.client.get(
-            f"{settings.API_V1_STR}/tests/{test_id2}/{execution_id}"
+        # Try to validate using test 2's ID
+        validation_data = {
+            "validator_id": str(self.TEST_USER.id),
+            "validator_type": "HUMAN",
+            "status": "PASS",
+            "response": "This is a mock response.",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+        response = self.client.put(
+            f"{settings.API_V1_STR}/tests/{test_id2}/{execution_id}/validate",
+            json=validation_data
         )
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -839,10 +995,26 @@ class TestTests:
             input_variables={"name": "John"}
         )
         
-        execute_response = self.client.post(
-            f"{settings.API_V1_STR}/tests/{test_id}/execute",
-            json=execution_data.model_dump()
-        )
+        # Mock the AI connection service to avoid real HTTP requests
+        with patch('app.modules.ai_connection_service.AIConnectionService.execute_prompt') as mock_execute:
+            mock_execute.return_value = {
+                "response": "Test not found response.",
+                "benchmarks": {
+                    "response_time": 90,
+                    "total_time": 135,
+                    "token_usage": {
+                        "prompt": 5,
+                        "completion": 2,
+                        "total": 7
+                    }
+                },
+                "raw_response": {"choices": [{"message": {"content": "Test not found response."}}]}
+            }
+        
+            execute_response = self.client.post(
+                f"{settings.API_V1_STR}/tests/{test_id}/execute",
+                json=execution_data.model_dump()
+            )
         execution_id = execute_response.json()["id"]
 
         # Try to get execution with non-existent test

@@ -9,7 +9,8 @@ from app.api import deps
 from app.core.config import settings
 from app.modules.store_interface import StoreProtocol, RedisStore
 from app.modules.tests_store import AITestStore
-from app.schemas import AITestSchema, AITestCreate, TestList, User
+from app.modules.ai_connection_service import AIConnectionService, AIConnectionError
+from app.schemas import AITestSchema, AITestCreate, TestList, User, ConnectionConfig
 from app.schemas.executions import (
     ExecutedTestCreate, 
     ExecutedTestSchema, 
@@ -28,6 +29,14 @@ class TestExecutionDetail(BaseModel):
 class TestWithExecutions(BaseModel):
     test: AITestSchema
     execution_ids: List[UUID]
+
+class ConnectionTestRequest(BaseModel):
+    connection_config: ConnectionConfig
+
+class ConnectionTestResponse(BaseModel):
+    success: bool
+    message: str
+    response_time: Optional[float] = None
 
 @router.get("", response_model=TestList)
 async def list_tests(
@@ -225,18 +234,41 @@ async def execute_test(
         prompt = test.prompt_template or ""
         logger.info(f"Using prompt for test {test_id}: {prompt}")
 
-        # TODO: Implement actual AI endpoint call
-        # For now, return a mock response
-        response = "This is a mock response. AI endpoint integration pending."
-        benchmarks = {
-            "response_time": 100,
-            "total_time": 150,
-            "token_usage": {
-                "prompt": 10,
-                "completion": 5,
-                "total": 15
-            }
-        }
+        # Initialize AI connection service
+        ai_service = AIConnectionService(logger)
+        
+        # Execute the prompt using the AI connection service
+        try:
+            result = await ai_service.execute_prompt(
+                connection_config=test.connection_config,
+                prompt=prompt,
+                input_variables=execution.input_variables
+            )
+            
+            response = result["response"]
+            benchmarks = result["benchmarks"]
+            
+            # Get the formatted prompt from the AI service
+            formatted_prompt = ai_service._format_prompt(prompt, execution.input_variables or {})
+            
+        except AIConnectionError as ai_error:
+            logger.error(f"AI connection error for test {test_id}: {str(ai_error)}")
+            # Create execution record with AI error
+            error_execution = execution_store.create(
+                test_id=str(test_id),
+                execution=execution,
+                user=current_user,
+                prompt=prompt,
+                response="",
+                error={
+                    "code": "AI_CONNECTION_ERROR",
+                    "message": str(ai_error)
+                }
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"AI endpoint connection failed: {str(ai_error)}"
+            )
 
         logger.info(f"Creating execution record for test {test_id}")
         # Create execution record (this will automatically update the indexes)
@@ -244,7 +276,7 @@ async def execute_test(
             test_id=str(test_id),
             execution=execution,
             user=current_user,
-            prompt=prompt,
+            prompt=formatted_prompt,
             response=response,
             benchmarks=benchmarks
         )
@@ -513,4 +545,44 @@ async def get_test_execution(
         )
 
     logger.info(f"Retrieved execution {execution_id} for test {test_id}")
-    return TestExecutionDetail(test=test, execution=execution) 
+    return TestExecutionDetail(test=test, execution=execution)
+
+@router.post("/test-connection", response_model=ConnectionTestResponse)
+async def test_ai_connection(
+    request: ConnectionTestRequest,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    logger: deps.TLogger = Depends(deps.get_logger),
+) -> ConnectionTestResponse:
+    """
+    Test the connection to an AI endpoint using the provided connection configuration.
+    """
+    try:
+        # Initialize AI connection service
+        ai_service = AIConnectionService(logger)
+        
+        # Test the connection
+        success = await ai_service.test_connection(request.connection_config)
+        
+        if success:
+            return ConnectionTestResponse(
+                success=True,
+                message="Connection test successful"
+            )
+        else:
+            return ConnectionTestResponse(
+                success=False,
+                message="Connection test failed"
+            )
+            
+    except AIConnectionError as ai_error:
+        logger.error(f"AI connection test error: {str(ai_error)}")
+        return ConnectionTestResponse(
+            success=False,
+            message=f"Connection test failed: {str(ai_error)}"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error during connection test: {str(e)}")
+        return ConnectionTestResponse(
+            success=False,
+            message=f"Unexpected error: {str(e)}"
+        ) 

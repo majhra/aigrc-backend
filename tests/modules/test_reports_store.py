@@ -52,8 +52,9 @@ class TestReportsStore(unittest.TestCase):
             prompt_template="Hello {name}",
             interface_type="DIRECT_LLM",
             connection_config=ConnectionConfig(
-                endpoint="https://api.example.com",
-                auth_type="API_KEY"
+                endpoint="https://api.galdren.com/v1/chat/completions",
+                auth_type="API_KEY",
+                auth_string="dummy-api-key"
             ),
             validation_config=ValidationConfig(
                 validator_type="HUMAN",

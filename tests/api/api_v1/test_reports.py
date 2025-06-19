@@ -27,8 +27,9 @@ class TestReports:
         prompt_template="What is 2+2?",
         interface_type="DIRECT_LLM",
         connection_config=ConnectionConfig(
-            endpoint="https://api.openai.com/v1/chat/completions",
+            endpoint="https://api.galdren.com/v1/chat/completions",
             auth_type="API_KEY",
+            auth_string="dummy-api-key",
             timeout=30
         ),
         validation_config=ValidationConfig(

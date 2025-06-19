@@ -34,6 +34,7 @@ class TestParams(BaseModel):
 class ConnectionConfig(BaseModel):
     endpoint: str | None = None
     auth_type: str = Field(..., pattern="^(NONE|API_KEY|BEARER_TOKEN)$")
+    auth_string: Optional[str] = None  # API key or bearer token value
     timeout: Optional[int] = None
 
 class ValidationCriterion(BaseModel):
