@@ -1,0 +1,351 @@
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
+from uuid import UUID, uuid4
+import json
+
+from app.modules.store_interface import LocalStore, StoreProtocol
+from app.schemas import (
+    AIEndpointConfig, AIEndpointConfigCreate, AIEndpointConfigUpdate,
+    ConfigTestResponse, AIProviderInfo, ConfigTemplate,
+    User
+)
+
+class AIConfigurationStore:
+    def __init__(self, store: StoreProtocol = None):
+        self._store = store or LocalStore()
+
+    def get(self, config_id: str) -> Optional[AIEndpointConfig]:
+        data = self._store.get(config_id)
+        if not data:
+            return None
+        
+        try:
+            return AIEndpointConfig(**data)
+        except Exception as e:
+            return None
+
+    def list(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        status: Optional[str] = None,
+        provider: Optional[str] = None,
+        search: Optional[str] = None,
+        created_by: Optional[str] = None,
+    ) -> tuple[List[AIEndpointConfig], int]:
+        keys = self._store.keys()
+        if not keys:
+            return [], 0
+
+        try:
+            configs = [self.get(key) for key in keys]
+            configs = [c for c in configs if c is not None]
+        except Exception as e:
+            return [], 0
+
+        # Apply filters
+        if status:
+            configs = [c for c in configs if c.status == status]
+        if provider:
+            configs = [c for c in configs if c.provider == provider]
+        if created_by:
+            configs = [c for c in configs if str(c.created_by) == str(created_by)]
+        if search:
+            search_lower = search.lower()
+            configs = [
+                c for c in configs
+                if search_lower in c.name.lower()
+                or search_lower in c.description.lower()
+                or search_lower in c.model_name.lower()
+                or any(search_lower in tag.lower() for tag in c.tags)
+            ]
+
+        # Sort by updated_at (most recent first)
+        configs.sort(key=lambda x: x.updated_at, reverse=True)
+
+        # Calculate pagination
+        total = len(configs)
+        start = (page - 1) * limit
+        end = start + limit
+        paginated_configs = configs[start:end]
+
+        return paginated_configs, total
+
+    def create(self, config: AIEndpointConfigCreate, user: User) -> AIEndpointConfig:
+        now = datetime.now(timezone.utc)
+        config_id = str(uuid4())
+        
+        # Prepare config data, excluding sensitive fields from storage
+        config_data = config.model_dump()
+        
+        # Store sensitive data separately (in production, encrypt these)
+        sensitive_data = {
+            "api_key": config_data.pop("api_key", None),
+            "bearer_token": config_data.pop("bearer_token", None),
+            "azure_client_secret": config_data.pop("azure_client_secret", None),
+        }
+        
+        new_config = AIEndpointConfig(
+            id=config_id,
+            created_by=user.id,
+            created_at=now,
+            updated_at=now,
+            **config_data
+        )
+        
+        # Store the configuration
+        self._store.put(config_id, new_config.model_dump())
+        
+        # Store sensitive data with special key (in production, use proper encryption)
+        if any(sensitive_data.values()):
+            sensitive_key = f"{config_id}_sensitive"
+            self._store.put(sensitive_key, sensitive_data)
+        
+        return new_config
+
+    def update(self, config_id: str, config: AIEndpointConfigUpdate) -> Optional[AIEndpointConfig]:
+        existing_data = self._store.get(config_id)
+        if not existing_data:
+            return None
+            
+        existing_config = AIEndpointConfig(**existing_data)
+        now = datetime.now(timezone.utc)
+        
+        # Update only provided fields
+        update_data = config.model_dump(exclude_unset=True)
+        
+        # Handle sensitive data separately
+        sensitive_updates = {}
+        for field in ["api_key", "bearer_token", "azure_client_secret"]:
+            if field in update_data:
+                sensitive_updates[field] = update_data.pop(field)
+        
+        # Update configuration fields
+        for field, value in update_data.items():
+            setattr(existing_config, field, value)
+        
+        existing_config.updated_at = now
+        
+        # Store updated configuration
+        self._store.put(config_id, existing_config.model_dump())
+        
+        # Update sensitive data if provided
+        if sensitive_updates:
+            sensitive_key = f"{config_id}_sensitive"
+            existing_sensitive = self._store.get(sensitive_key) or {}
+            existing_sensitive.update(sensitive_updates)
+            self._store.put(sensitive_key, existing_sensitive)
+        
+        return existing_config
+
+    def delete(self, config_id: str) -> bool:
+        existing_data = self._store.get(config_id)
+        if not existing_data:
+            return False
+        
+        # Delete main config
+        self._store.pop(config_id)
+        
+        # Delete sensitive data
+        sensitive_key = f"{config_id}_sensitive"
+        self._store.pop(sensitive_key)
+        
+        return True
+
+    def get_sensitive_data(self, config_id: str) -> Dict[str, str]:
+        """Get sensitive authentication data for a configuration"""
+        sensitive_key = f"{config_id}_sensitive"
+        return self._store.get(sensitive_key) or {}
+
+    def update_test_result(self, config_id: str, test_response: ConfigTestResponse) -> Optional[AIEndpointConfig]:
+        """Update configuration with test results"""
+        existing_data = self._store.get(config_id)
+        if not existing_data:
+            return None
+            
+        existing_config = AIEndpointConfig(**existing_data)
+        
+        # Update test status
+        existing_config.last_tested_at = test_response.test_timestamp
+        existing_config.last_test_status = "success" if test_response.success else "failed"
+        existing_config.last_test_error = test_response.error_message
+        
+        # Update statistics
+        existing_config.total_requests += 1
+        if test_response.success:
+            existing_config.successful_requests += 1
+            # Update average response time
+            if existing_config.avg_response_time_ms is None:
+                existing_config.avg_response_time_ms = float(test_response.response_time_ms)
+            else:
+                # Simple moving average
+                total_time = existing_config.avg_response_time_ms * (existing_config.successful_requests - 1)
+                existing_config.avg_response_time_ms = (total_time + test_response.response_time_ms) / existing_config.successful_requests
+        else:
+            existing_config.failed_requests += 1
+        
+        existing_config.updated_at = datetime.now(timezone.utc)
+        
+        self._store.put(config_id, existing_config.model_dump())
+        return existing_config
+
+class AIProviderService:
+    """Service for managing AI provider information and templates"""
+    
+    @staticmethod
+    def get_supported_providers() -> List[AIProviderInfo]:
+        """Get list of supported AI providers"""
+        providers = [
+            AIProviderInfo(
+                provider="openai",
+                display_name="OpenAI",
+                description="OpenAI GPT models including GPT-4, GPT-3.5",
+                auth_types=["api_key"],
+                required_fields=["api_key", "model_name"],
+                optional_fields=["endpoint_url"],
+                supported_models=["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-3.5-turbo-16k"],
+                documentation_url="https://platform.openai.com/docs"
+            ),
+            AIProviderInfo(
+                provider="anthropic",
+                display_name="Anthropic",
+                description="Anthropic Claude models",
+                auth_types=["api_key"],
+                required_fields=["api_key", "model_name"],
+                optional_fields=["endpoint_url"],
+                supported_models=["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"],
+                documentation_url="https://docs.anthropic.com"
+            ),
+            AIProviderInfo(
+                provider="azure_openai",
+                display_name="Azure OpenAI",
+                description="Microsoft Azure OpenAI Service",
+                auth_types=["api_key", "azure_ad"],
+                required_fields=["endpoint_url", "api_key", "azure_deployment_name", "azure_api_version"],
+                optional_fields=["azure_tenant_id", "azure_client_id", "azure_client_secret"],
+                supported_models=["gpt-4", "gpt-35-turbo"],
+                documentation_url="https://docs.microsoft.com/en-us/azure/cognitive-services/openai/"
+            ),
+            AIProviderInfo(
+                provider="google",
+                display_name="Google AI",
+                description="Google Gemini and PaLM models",
+                auth_types=["api_key"],
+                required_fields=["api_key", "model_name"],
+                optional_fields=["endpoint_url"],
+                supported_models=["gemini-pro", "gemini-pro-vision"],
+                documentation_url="https://ai.google.dev/docs"
+            ),
+            AIProviderInfo(
+                provider="huggingface",
+                display_name="Hugging Face",
+                description="Hugging Face Inference API",
+                auth_types=["api_key", "bearer_token"],
+                required_fields=["model_name"],
+                optional_fields=["endpoint_url", "huggingface_task"],
+                supported_models=["gpt2", "distilbert-base-uncased", "t5-base"],
+                documentation_url="https://huggingface.co/docs/api-inference"
+            ),
+            AIProviderInfo(
+                provider="custom",
+                display_name="Custom API",
+                description="Custom AI API endpoint",
+                auth_types=["api_key", "bearer_token", "oauth"],
+                required_fields=["endpoint_url"],
+                optional_fields=["custom_headers"],
+                supported_models=[],
+                documentation_url=None
+            )
+        ]
+        
+        return providers
+    
+    @staticmethod
+    def get_provider_templates() -> List[ConfigTemplate]:
+        """Get configuration templates for different providers"""
+        templates = [
+            ConfigTemplate(
+                id="openai_gpt4",
+                name="OpenAI GPT-4",
+                description="Standard OpenAI GPT-4 configuration",
+                provider="openai",
+                template_config={
+                    "endpoint_url": "https://api.openai.com/v1/chat/completions",
+                    "model_name": "gpt-4",
+                    "timeout_seconds": 30,
+                    "max_retries": 3,
+                    "rate_limit_rpm": 500
+                },
+                required_user_inputs=["api_key", "name", "description"]
+            ),
+            ConfigTemplate(
+                id="anthropic_claude",
+                name="Anthropic Claude",
+                description="Standard Anthropic Claude configuration",
+                provider="anthropic",
+                template_config={
+                    "endpoint_url": "https://api.anthropic.com/v1/messages",
+                    "model_name": "claude-3-sonnet-20240229",
+                    "timeout_seconds": 30,
+                    "max_retries": 3,
+                    "rate_limit_rpm": 100
+                },
+                required_user_inputs=["api_key", "name", "description"]
+            ),
+            ConfigTemplate(
+                id="azure_openai_gpt4",
+                name="Azure OpenAI GPT-4",
+                description="Azure OpenAI Service GPT-4 configuration",
+                provider="azure_openai",
+                template_config={
+                    "model_name": "gpt-4",
+                    "azure_api_version": "2023-12-01-preview",
+                    "timeout_seconds": 30,
+                    "max_retries": 3
+                },
+                required_user_inputs=["endpoint_url", "api_key", "azure_deployment_name", "name", "description"]
+            )
+        ]
+        
+        return templates
+    
+    @staticmethod
+    def validate_configuration(provider: str, config_data: dict) -> dict:
+        """Validate configuration for a specific provider"""
+        providers = {p.provider: p for p in AIProviderService.get_supported_providers()}
+        
+        if provider not in providers:
+            return {
+                "is_valid": False,
+                "errors": [f"Unsupported provider: {provider}"],
+                "warnings": [],
+                "suggestions": []
+            }
+        
+        provider_info = providers[provider]
+        errors = []
+        warnings = []
+        suggestions = []
+        
+        # Check required fields
+        for field in provider_info.required_fields:
+            if field not in config_data or not config_data[field]:
+                errors.append(f"Required field missing: {field}")
+        
+        # Provider-specific validations
+        if provider == "openai":
+            if config_data.get("endpoint_url") and "openai.com" not in config_data["endpoint_url"]:
+                warnings.append("Endpoint URL does not appear to be an OpenAI endpoint")
+        
+        elif provider == "azure_openai":
+            if not config_data.get("azure_deployment_name"):
+                errors.append("Azure deployment name is required for Azure OpenAI")
+            if not config_data.get("azure_api_version"):
+                suggestions.append("Consider using the latest API version: 2023-12-01-preview")
+        
+        return {
+            "is_valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+            "suggestions": suggestions
+        }
