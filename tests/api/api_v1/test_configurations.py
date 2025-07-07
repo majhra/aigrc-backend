@@ -765,7 +765,7 @@ class TestConfigurationErrorCases:
         """Test creating configuration with invalid JSON"""
         response = self.client.post(
             "/api/v1.0/configurations/",
-            data="invalid json",
+            content="invalid json",
             headers={"Content-Type": "application/json"}
         )
         assert response.status_code == 422
