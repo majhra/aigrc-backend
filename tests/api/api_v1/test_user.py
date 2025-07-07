@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 import uuid
 import pytest
 from typing import Any
@@ -17,6 +17,37 @@ from app.api.utils import (
     get_password_hash,
     get_user_by_email,
 )
+
+# Mock password hashing for fast tests
+def mock_get_password_hash(password: str) -> str:
+    """Fast fake hash for testing - just prefixes the password with 'hashed_'"""
+    return f"hashed_{password}"
+
+def mock_verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Fast fake verification for testing"""
+    return hashed_password == f"hashed_{plain_password}"
+
+# Apply mocks at module level for fast password operations
+password_hash_mock = patch('app.api.utils.get_password_hash', side_effect=mock_get_password_hash)
+verify_password_mock = patch('app.api.utils.verify_password', side_effect=mock_verify_password)
+pwd_context_hash_mock = patch('app.api.utils.pwd_context.hash', side_effect=mock_get_password_hash)
+pwd_context_verify_mock = patch('app.api.utils.pwd_context.verify', side_effect=mock_verify_password)
+
+# Start all mocks
+password_hash_mock.start()
+verify_password_mock.start()
+pwd_context_hash_mock.start()
+pwd_context_verify_mock.start()
+
+# Cleanup function to stop mocks when module is unloaded
+import atexit
+def cleanup_mocks():
+    password_hash_mock.stop()
+    verify_password_mock.stop()
+    pwd_context_hash_mock.stop()
+    pwd_context_verify_mock.stop()
+
+atexit.register(cleanup_mocks)
 
 class UUIDMatcher:
     """A matcher that accepts any valid UUID4 string."""
