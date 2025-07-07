@@ -15,6 +15,9 @@ from app.modules.executions_store import ExecutedTestStore
 from app.modules.user_store import UserStore
 from app.modules.group_store import GroupStore
 from app.modules.reports_store import ReportsStore
+from app.modules.prompts_store import PromptCategoryStore, PromptStore, PromptSetStore
+from app.modules.configurations_store import AIConfigurationStore, AIProviderService
+
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/user/login", auto_error=False
@@ -68,6 +71,24 @@ def get_reports_store(
     Get the reports store instance.
     """
     return ReportsStore(test_store, execution_store)
+
+# Dependency to get stores
+def get_category_store(logger: TLogger = Depends(get_logger)) -> PromptCategoryStore:
+    redis_store = RedisStore(logger, "prompt_category", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT)
+    return PromptCategoryStore(redis_store)
+
+def get_prompt_store(logger: TLogger = Depends(get_logger)) -> PromptStore:
+    redis_store = RedisStore(logger, "prompt", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT)
+    return PromptStore(redis_store)
+
+def get_prompt_set_store(logger: TLogger = Depends(get_logger)) -> PromptSetStore:
+    redis_store = RedisStore(logger, "prompt_set", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT)
+    return PromptSetStore(redis_store)
+
+# Dependency to get configuration store
+def get_config_store(logger: TLogger = Depends(get_logger)) -> AIConfigurationStore:
+    redis_store = RedisStore(logger, "ai_config", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT)
+    return AIConfigurationStore(redis_store)
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],

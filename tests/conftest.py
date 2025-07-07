@@ -1,10 +1,15 @@
 import pytest
 from fastapi.testclient import TestClient
+from datetime import datetime, timezone
+from uuid import uuid4
+from jose import JWTError, jwt
 
 import app.main as server
 from app.modules.store_interface import LocalStore
 from app.modules.user_store import UserStore
 from app.modules.group_store import GroupStore
+from app.schemas import User, GroupCreate
+from app.core.config import settings
 
 
 class ForceEquals:
@@ -43,3 +48,49 @@ def setup_and_teardown(request: pytest.FixtureRequest):
     group_keys = group_underlying_store.keys()  # type: ignore
     for key in group_keys:  # type: ignore
         group_underlying_store.pop(key)  # type: ignore
+
+
+@pytest.fixture
+def test_user():
+    """Create a test user object."""
+    return User(
+        id=uuid4(),
+        email="test@example.com",
+        full_name="Test User",
+        disabled=False,
+        created_at=datetime.now(timezone.utc),
+        is_verified=True,
+        group=str(uuid4())
+    )
+
+@pytest.fixture
+def test_user_token(test_user):
+    """Create a test user and return a valid JWT token for authentication."""
+    from app.api import deps
+    from app.modules.prompts_store import PromptCategoryStore, PromptStore, PromptSetStore
+    from app.modules.configurations_store import AIConfigurationStore
+    import app.main as main_app
+    
+    # Override authentication to return our test user
+    main_app.app.dependency_overrides[deps.get_current_active_user] = lambda: test_user
+    
+    # Override store dependencies to use LocalStore instead of Redis
+    main_app.app.dependency_overrides[deps.get_category_store] = lambda: PromptCategoryStore(LocalStore())
+    main_app.app.dependency_overrides[deps.get_prompt_store] = lambda: PromptStore(LocalStore())
+    main_app.app.dependency_overrides[deps.get_prompt_set_store] = lambda: PromptSetStore(LocalStore())
+    main_app.app.dependency_overrides[deps.get_config_store] = lambda: AIConfigurationStore(LocalStore())
+    
+    # Create test user data for JWT token
+    user_data = {
+        "sub": test_user.email,
+        "user_id": str(test_user.id),
+        "exp": datetime.now(timezone.utc).timestamp() + 3600  # 1 hour from now
+    }
+    
+    # Create JWT token
+    token = jwt.encode(user_data, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    
+    yield token
+    
+    # Clean up the overrides after the test
+    main_app.app.dependency_overrides.clear()
