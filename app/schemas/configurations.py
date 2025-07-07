@@ -163,6 +163,7 @@ class ConfigValidationRequest(BaseModel):
     endpoint_url: str
     auth_type: str
     model_name: str
+    api_key: str | None = None
     # Additional fields for validation without saving
 
 class ConfigValidationResponse(BaseModel):

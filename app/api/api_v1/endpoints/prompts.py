@@ -174,6 +174,143 @@ async def get_prompts(
         limit=limit
     )
 
+# PROMPT SETS ENDPOINTS
+
+@router.get("/sets", response_model=PromptSetList)
+async def get_prompt_sets(
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    status: Optional[str] = Query(None, pattern="^(ACTIVE|ARCHIVED)$"),
+    category_id: Optional[UUID4] = Query(None),
+    search: Optional[str] = Query(None),
+    prompt_set_store: PromptSetStore = Depends(deps.get_prompt_set_store),
+    logger: TLogger = Depends(deps.get_logger),
+):
+    """
+    Get list of prompt sets with pagination and filtering.
+    """
+    logger.info(f"Retrieving prompt sets - page: {page}, limit: {limit}")
+    
+    sets, total = prompt_set_store.list(
+        page=page,
+        limit=limit,
+        status=status,
+        category_id=str(category_id) if category_id else None,
+        search=search
+    )
+    
+    return PromptSetList(
+        items=sets,
+        total=total,
+        page=page,
+        limit=limit
+    )
+
+@router.get("/sets/{set_id}", response_model=PromptSet)
+async def get_prompt_set(
+    set_id: UUID4,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    prompt_set_store: PromptSetStore = Depends(deps.get_prompt_set_store),
+    logger: TLogger = Depends(deps.get_logger),
+):
+    """
+    Get a specific prompt set by ID.
+    """
+    logger.info(f"Retrieving prompt set: {set_id}")
+    
+    prompt_set = prompt_set_store.get(str(set_id))
+    if not prompt_set:
+        logger.error(f"Prompt set not found: {set_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt set not found"
+        )
+    
+    return prompt_set
+
+@router.post("/sets", response_model=PromptSet, status_code=status.HTTP_201_CREATED)
+async def create_prompt_set(
+    set_create: PromptSetCreate,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    prompt_set_store: PromptSetStore = Depends(deps.get_prompt_set_store),
+    prompt_store: PromptStore = Depends(deps.get_prompt_store),
+    logger: TLogger = Depends(deps.get_logger),
+):
+    """
+    Create a new prompt set.
+    """
+    logger.info(f"Creating prompt set: {set_create.name}")
+    
+    # Validate that all prompt IDs exist
+    for prompt_id in set_create.prompt_ids:
+        prompt = prompt_store.get(str(prompt_id))
+        if not prompt:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Prompt not found: {prompt_id}"
+            )
+    
+    prompt_set = prompt_set_store.create(set_create, current_user)
+    
+    return prompt_set
+
+@router.put("/sets/{set_id}", response_model=PromptSet)
+async def update_prompt_set(
+    set_id: UUID4,
+    set_update: PromptSetUpdate,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    prompt_set_store: PromptSetStore = Depends(deps.get_prompt_set_store),
+    prompt_store: PromptStore = Depends(deps.get_prompt_store),
+    logger: TLogger = Depends(deps.get_logger),
+):
+    """
+    Update a prompt set by ID.
+    """
+    logger.info(f"Updating prompt set: {set_id}")
+    
+    # Validate that all prompt IDs exist (if prompt_ids are being updated)
+    if set_update.prompt_ids is not None:
+        for prompt_id in set_update.prompt_ids:
+            prompt = prompt_store.get(str(prompt_id))
+            if not prompt:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Prompt not found: {prompt_id}"
+                )
+    
+    prompt_set = prompt_set_store.update(str(set_id), set_update)
+    if not prompt_set:
+        logger.error(f"Prompt set not found: {set_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt set not found"
+        )
+    
+    return prompt_set
+
+@router.delete("/sets/{set_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_prompt_set(
+    set_id: UUID4,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    prompt_set_store: PromptSetStore = Depends(deps.get_prompt_set_store),
+    logger: TLogger = Depends(deps.get_logger),
+):
+    """
+    Delete a prompt set by ID.
+    """
+    logger.info(f"Deleting prompt set: {set_id}")
+    
+    success = prompt_set_store.delete(str(set_id))
+    if not success:
+        logger.error(f"Prompt set not found: {set_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt set not found"
+        )
+
+# INDIVIDUAL PROMPT ENDPOINTS
+
 @router.get("/{prompt_id}", response_model=Prompt)
 async def get_prompt(
     prompt_id: UUID4,
@@ -324,138 +461,3 @@ async def preview_prompt(
     )
     
     return preview
-
-# PROMPT SETS ENDPOINTS
-
-@router.get("/sets", response_model=PromptSetList)
-async def get_prompt_sets(
-    current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    status: Optional[str] = Query(None, pattern="^(ACTIVE|ARCHIVED)$"),
-    category_id: Optional[UUID4] = Query(None),
-    search: Optional[str] = Query(None),
-    prompt_set_store: PromptSetStore = Depends(deps.get_prompt_set_store),
-    logger: TLogger = Depends(deps.get_logger),
-):
-    """
-    Get list of prompt sets with pagination and filtering.
-    """
-    logger.info(f"Retrieving prompt sets - page: {page}, limit: {limit}")
-    
-    sets, total = prompt_set_store.list(
-        page=page,
-        limit=limit,
-        status=status,
-        category_id=str(category_id) if category_id else None,
-        search=search
-    )
-    
-    return PromptSetList(
-        items=sets,
-        total=total,
-        page=page,
-        limit=limit
-    )
-
-@router.get("/sets/{set_id}", response_model=PromptSet)
-async def get_prompt_set(
-    set_id: UUID4,
-    current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    prompt_set_store: PromptSetStore = Depends(deps.get_prompt_set_store),
-    logger: TLogger = Depends(deps.get_logger),
-):
-    """
-    Get a specific prompt set by ID.
-    """
-    logger.info(f"Retrieving prompt set: {set_id}")
-    
-    prompt_set = prompt_set_store.get(str(set_id))
-    if not prompt_set:
-        logger.error(f"Prompt set not found: {set_id}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Prompt set not found"
-        )
-    
-    return prompt_set
-
-@router.post("/sets", response_model=PromptSet, status_code=status.HTTP_201_CREATED)
-async def create_prompt_set(
-    set_create: PromptSetCreate,
-    current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    prompt_set_store: PromptSetStore = Depends(deps.get_prompt_set_store),
-    prompt_store: PromptStore = Depends(deps.get_prompt_store),
-    logger: TLogger = Depends(deps.get_logger),
-):
-    """
-    Create a new prompt set.
-    """
-    logger.info(f"Creating prompt set: {set_create.name}")
-    
-    # Validate that all prompt IDs exist
-    for prompt_id in set_create.prompt_ids:
-        prompt = prompt_store.get(str(prompt_id))
-        if not prompt:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Prompt not found: {prompt_id}"
-            )
-    
-    prompt_set = prompt_set_store.create(set_create, current_user)
-    
-    return prompt_set
-
-@router.put("/sets/{set_id}", response_model=PromptSet)
-async def update_prompt_set(
-    set_id: UUID4,
-    set_update: PromptSetUpdate,
-    current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    prompt_set_store: PromptSetStore = Depends(deps.get_prompt_set_store),
-    prompt_store: PromptStore = Depends(deps.get_prompt_store),
-    logger: TLogger = Depends(deps.get_logger),
-):
-    """
-    Update a prompt set by ID.
-    """
-    logger.info(f"Updating prompt set: {set_id}")
-    
-    # Validate that all prompt IDs exist (if prompt_ids are being updated)
-    if set_update.prompt_ids is not None:
-        for prompt_id in set_update.prompt_ids:
-            prompt = prompt_store.get(str(prompt_id))
-            if not prompt:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Prompt not found: {prompt_id}"
-                )
-    
-    prompt_set = prompt_set_store.update(str(set_id), set_update)
-    if not prompt_set:
-        logger.error(f"Prompt set not found: {set_id}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Prompt set not found"
-        )
-    
-    return prompt_set
-
-@router.delete("/sets/{set_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_prompt_set(
-    set_id: UUID4,
-    current_user: Annotated[User, Depends(deps.get_current_active_user)],
-    prompt_set_store: PromptSetStore = Depends(deps.get_prompt_set_store),
-    logger: TLogger = Depends(deps.get_logger),
-):
-    """
-    Delete a prompt set by ID.
-    """
-    logger.info(f"Deleting prompt set: {set_id}")
-    
-    success = prompt_set_store.delete(str(set_id))
-    if not success:
-        logger.error(f"Prompt set not found: {set_id}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Prompt set not found"
-        )
