@@ -17,7 +17,7 @@ class TestAITestStore(unittest.TestCase):
         # Create test user
         self.test_user = User(
             id=str(uuid4()),
-            email="test@example.com",
+            email="goricoaico+tests_store@gmail.com",
             full_name="Test User",
             disabled=False,
             created_at=datetime.now(timezone.utc),

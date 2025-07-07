@@ -40,7 +40,7 @@ class TestAIConnection:
         # Create test user
         test_user = User(
             id=uuid4(),
-            email="test@example.com",
+            email="goricoaico+stores@gmail.com",
             full_name="Test User",
             disabled=False,
             created_at=datetime.now(timezone.utc),

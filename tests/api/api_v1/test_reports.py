@@ -57,7 +57,7 @@ class TestReports:
     def test_user(self):
         return User(
             id=str(uuid4()),
-            email="test@example.com",
+            email="goricoaico+reports@gmail.com",
             full_name="Test User",
             disabled=False,
             created_at=datetime.now(timezone.utc),

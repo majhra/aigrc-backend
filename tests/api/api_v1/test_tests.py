@@ -63,7 +63,7 @@ class TestTests:
         # Create a test user with the group
         self.TEST_USER = User(
             id=uuid4(),
-            email="test@example.com",
+            email="goricoaico+tests@gmail.com",
             full_name="Test User",
             disabled=False,
             created_at=datetime.now(timezone.utc),

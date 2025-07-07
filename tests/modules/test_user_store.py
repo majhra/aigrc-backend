@@ -18,7 +18,7 @@ class TestUserStore(unittest.TestCase):
         # Create test user data
         self.test_user = User(
             id=str(uuid4()),
-            email="test@example.com",
+            email="goricoaico+user_store@gmail.com",
             full_name="Test User",
             password="hashed_password",
             disabled=False,

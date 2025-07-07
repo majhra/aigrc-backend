@@ -55,7 +55,7 @@ def test_user():
     """Create a test user object."""
     return User(
         id=uuid4(),
-        email="test@example.com",
+        email="goricoaico+fixture@gmail.com",
         full_name="Test User",
         disabled=False,
         created_at=datetime.now(timezone.utc),
