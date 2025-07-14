@@ -314,7 +314,7 @@ class TestExecutedTestStore(unittest.TestCase):
                 ),
                 input_variables={}
             ),
-            user=User(id=str(uuid4()), email="test2@example.com"),
+            user=User(id=str(uuid4()), email="goricoaico+user2@gmail.com"),
             prompt="test prompt 2",
             response="test response 2",
             benchmarks=self.benchmarks

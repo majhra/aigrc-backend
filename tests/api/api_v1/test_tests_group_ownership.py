@@ -32,7 +32,7 @@ class TestTestsGroupOwnership:
         # Create test users
         self.user1 = User(
             id=uuid4(),
-            email="user1@example.com",
+            email="goricoaico+user1@gmail.com",
             full_name="User 1",
             disabled=False,
             created_at=datetime.now(timezone.utc),
@@ -42,7 +42,7 @@ class TestTestsGroupOwnership:
         
         self.user2 = User(
             id=uuid4(),
-            email="user2@example.com",
+            email="goricoaico+user2@gmail.com",
             full_name="User 2",
             disabled=False,
             created_at=datetime.now(timezone.utc),
@@ -52,7 +52,7 @@ class TestTestsGroupOwnership:
         
         self.admin_user = User(
             id=uuid4(),
-            email="admin@example.com",
+            email="goricoaico+user3@gmail.com",
             full_name="Admin User",
             disabled=False,
             created_at=datetime.now(timezone.utc),

@@ -16,3 +16,7 @@
 [ ] - copy test to draft.
 [ ] - security around the test init. Server side, how to ensure the requester is also the owner of the target chatbot, else it's a security exploit (ddos etc). On the browser, handle CORS. Handle logins. 
 [ ] - Add updated test sets from NIST AI Risk Management Framework, OECD AI Principles, GDPR, CCPA/CPRA , NYDFS Cybersecurity Regulation , OCC/FDIC/FFIEC Guidelines , SOX & COSO Frameworks, NIST SP 800-53 / SP 800-161, other standard tests?
+[ ] - Password reset return malformed data 400 on password resets on invalid email. 
+[ ] - user group CRUD.
+[ ] - add user id to all backend logs to track who does what. 
+[ ] - GET /api/v1.0/prompts/?page=1&limit=50&status=ACTIVE&search=tes doesn't seem to respond with valid data. is it because we're searching name rather than uuid? 

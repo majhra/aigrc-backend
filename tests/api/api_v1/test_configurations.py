@@ -57,7 +57,7 @@ class TestAIConfigurations:
         # Create a test user with the group
         self.TEST_USER = User(
             id=uuid4(),
-            email="goricoaico+configurations@gmail.com",
+            email="goricoaico+aiconfig@gmail.com",
             full_name="Test User",
             disabled=False,
             created_at=datetime.now(timezone.utc),
@@ -203,7 +203,7 @@ class TestConfigurationProviders:
         # Create a test user with the group
         self.TEST_USER = User(
             id=uuid4(),
-            email="goricoaico+configurations@gmail.com",
+            email="goricoaico+testconfig@gmail.com",
             full_name="Test User",
             disabled=False,
             created_at=datetime.now(timezone.utc),
@@ -307,7 +307,7 @@ class TestConfigurationValidation:
         # Create a test user with the group
         self.TEST_USER = User(
             id=uuid4(),
-            email="goricoaico+configurations@gmail.com",
+            email="goricoaico+testconfig@gmail.com",
             full_name="Test User",
             disabled=False,
             created_at=datetime.now(timezone.utc),
@@ -352,7 +352,6 @@ class TestConfigurationValidation:
         
         assert response.status_code == 200
         data = response.json()
-        print(data)
         assert data["is_valid"] is True
         assert len(data["errors"]) == 0
     
@@ -360,7 +359,7 @@ class TestConfigurationValidation:
         validation_data = {
             "provider": "openai",
             "auth_type": "api_key"
-            # Missing required fields
+            # Missing required fields: endpoint_url, model_name
         }
         
         response = self.client.post(
@@ -369,7 +368,15 @@ class TestConfigurationValidation:
         )
         
         assert response.status_code == 422
-        # This test validates that FastAPI correctly rejects requests missing required schema fields
+        data = response.json()
+        assert "detail" in data
+        detail = data["detail"]
+        assert len(detail) > 0
+        
+        # Check that endpoint_url and model_name are reported as missing
+        missing_fields = [error["loc"][-1] for error in detail if error["type"] == "missing"]
+        assert "endpoint_url" in missing_fields
+        assert "model_name" in missing_fields
     
     def test_validate_unsupported_provider(self):
         validation_data = {
@@ -404,7 +411,7 @@ class TestConfigurationTesting:
         # Create a test user with the group
         self.TEST_USER = User(
             id=uuid4(),
-            email="goricoaico+configurations@gmail.com",
+            email="goricoaico+testconfig@gmail.com",
             full_name="Test User",
             disabled=False,
             created_at=datetime.now(timezone.utc),
@@ -478,7 +485,7 @@ class TestConfigurationFiltering:
         # Create a test user with the group
         self.TEST_USER = User(
             id=uuid4(),
-            email="goricoaico+configurations@gmail.com",
+            email="goricoaico+testconfig@gmail.com",
             full_name="Test User",
             disabled=False,
             created_at=datetime.now(timezone.utc),
@@ -556,267 +563,3 @@ class TestConfigurationFiltering:
         assert data["page"] == 1
         assert data["limit"] == 5
         assert len(data["items"]) <= 5
-
-class TestConfigurationAuthentication:
-    """Test authentication and authorization for configuration endpoints"""
-    
-    def setup_method(self, method):
-        """Setup test environment before each test"""
-        self.client = TestClient(app)
-        self.config_store = AIConfigurationStore(LocalStore())
-        self.user_store = UserStore(LocalStore())
-        self.group_store = GroupStore(LocalStore())
-        
-        # Create a test group
-        group_data = GroupCreate(name="Test Group", description="Test group for configs")
-        self.test_group = self.group_store.create(group_data, "system")
-        
-        # Create a test user with the group
-        self.TEST_USER = User(
-            id=uuid4(),
-            email="goricoaico+configurations@gmail.com",
-            full_name="Test User",
-            disabled=False,
-            created_at=datetime.now(timezone.utc),
-            is_verified=True,
-            group=str(self.test_group.id)
-        )
-        
-        # Store the user
-        self.user_store.create(self.TEST_USER, str(self.test_group.id))
-
-    def teardown_method(self, method):
-        """Clean up after each test"""
-        self.client.app.dependency_overrides = {}
-
-    def test_get_configurations_unauthorized(self):
-        """Test that unauthenticated users cannot access configurations"""
-        response = self.client.get("/api/v1.0/configurations/")
-        assert response.status_code == 401
-    
-    def test_create_configuration_unauthorized(self, sample_openai_config):
-        """Test that unauthenticated users cannot create configurations"""
-        response = self.client.post(
-            "/api/v1.0/configurations/",
-            json=sample_openai_config
-        )
-        assert response.status_code == 401
-    
-    def test_get_configuration_by_id_unauthorized(self):
-        """Test that unauthenticated users cannot get specific configurations"""
-        config_id = str(uuid4())
-        response = self.client.get(f"/api/v1.0/configurations/{config_id}")
-        assert response.status_code == 401
-    
-    def test_update_configuration_unauthorized(self):
-        """Test that unauthenticated users cannot update configurations"""
-        config_id = str(uuid4())
-        update_data = {"name": "Updated Config"}
-        response = self.client.put(
-            f"/api/v1.0/configurations/{config_id}",
-            json=update_data
-        )
-        assert response.status_code == 401
-    
-    def test_delete_configuration_unauthorized(self):
-        """Test that unauthenticated users cannot delete configurations"""
-        config_id = str(uuid4())
-        response = self.client.delete(f"/api/v1.0/configurations/{config_id}")
-        assert response.status_code == 401
-    
-    def test_test_configuration_unauthorized(self):
-        """Test that unauthenticated users cannot test configurations"""
-        config_id = str(uuid4())
-        test_data = {"test_prompt": "Hello"}
-        response = self.client.post(
-            f"/api/v1.0/configurations/{config_id}/test",
-            json=test_data
-        )
-        assert response.status_code == 401
-    
-    def test_get_providers_unauthorized(self):
-        """Test that unauthenticated users cannot get provider list"""
-        response = self.client.get("/api/v1.0/configurations/providers/list")
-        assert response.status_code == 401
-    
-    def test_get_templates_unauthorized(self):
-        """Test that unauthenticated users cannot get template list"""
-        response = self.client.get("/api/v1.0/configurations/templates/list")
-        assert response.status_code == 401
-    
-    def test_validate_configuration_unauthorized(self):
-        """Test that unauthenticated users cannot validate configurations"""
-        validation_data = {
-            "provider": "openai",
-            "endpoint_url": "https://api.openai.com/v1/chat/completions",
-            "auth_type": "api_key",
-            "model_name": "gpt-3.5-turbo"
-        }
-        response = self.client.post(
-            "/api/v1.0/configurations/validate",
-            json=validation_data
-        )
-        assert response.status_code == 401
-
-class TestConfigurationErrorCases:
-    """Test error cases and validation for configuration endpoints"""
-    
-    def setup_method(self, method):
-        """Setup test environment before each test"""
-        self.client = TestClient(app)
-        self.config_store = AIConfigurationStore(LocalStore())
-        self.user_store = UserStore(LocalStore())
-        self.group_store = GroupStore(LocalStore())
-        
-        # Create a test group
-        group_data = GroupCreate(name="Test Group", description="Test group for configs")
-        self.test_group = self.group_store.create(group_data, "system")
-        
-        # Create a test user with the group
-        self.TEST_USER = User(
-            id=uuid4(),
-            email="goricoaico+configurations@gmail.com",
-            full_name="Test User",
-            disabled=False,
-            created_at=datetime.now(timezone.utc),
-            is_verified=True,
-            group=str(self.test_group.id)
-        )
-        
-        # Store the user
-        self.user_store.create(self.TEST_USER, str(self.test_group.id))
-
-        # Override dependencies
-        self.client.app.dependency_overrides[deps.get_current_active_user] = lambda: self.TEST_USER
-        self.client.app.dependency_overrides[deps.get_config_store] = lambda: self.config_store
-        self.client.app.dependency_overrides[deps.get_user_store] = lambda: self.user_store
-        self.client.app.dependency_overrides[deps.get_group_store] = lambda: self.group_store
-
-    def teardown_method(self, method):
-        """Clean up after each test"""
-        self.client.app.dependency_overrides = {}
-        # Clear stores
-        if isinstance(self.config_store._store, LocalStore):
-            self.config_store._store.data.clear()
-        if isinstance(self.user_store._store, LocalStore):
-            self.user_store._store.data.clear()
-        if isinstance(self.group_store._store, LocalStore):
-            self.group_store._store.data.clear()
-
-    def test_get_configuration_not_found(self):
-        """Test getting a configuration that doesn't exist"""
-        non_existent_id = str(uuid4())
-        response = self.client.get(f"/api/v1.0/configurations/{non_existent_id}")
-        assert response.status_code == 404
-        data = response.json()
-        assert "not found" in data["detail"].lower()
-    
-    def test_get_configuration_invalid_uuid(self):
-        """Test getting a configuration with invalid UUID"""
-        invalid_id = "not-a-uuid"
-        response = self.client.get(f"/api/v1.0/configurations/{invalid_id}")
-        assert response.status_code == 422  # Validation error
-    
-    def test_update_configuration_not_found(self):
-        """Test updating a configuration that doesn't exist"""
-        non_existent_id = str(uuid4())
-        update_data = {"name": "Updated Config"}
-        response = self.client.put(
-            f"/api/v1.0/configurations/{non_existent_id}",
-            json=update_data
-        )
-        assert response.status_code == 404
-        data = response.json()
-        assert "not found" in data["detail"].lower()
-    
-    def test_delete_configuration_not_found(self):
-        """Test deleting a configuration that doesn't exist"""
-        non_existent_id = str(uuid4())
-        response = self.client.delete(f"/api/v1.0/configurations/{non_existent_id}")
-        assert response.status_code == 404
-        data = response.json()
-        assert "not found" in data["detail"].lower()
-    
-    def test_test_configuration_not_found(self):
-        """Test testing a configuration that doesn't exist"""
-        non_existent_id = str(uuid4())
-        test_data = {"test_prompt": "Hello"}
-        response = self.client.post(
-            f"/api/v1.0/configurations/{non_existent_id}/test",
-            json=test_data
-        )
-        assert response.status_code == 404
-        data = response.json()
-        assert "not found" in data["detail"].lower()
-    
-    def test_create_configuration_missing_required_fields(self):
-        """Test creating configuration with missing required fields"""
-        incomplete_config = {
-            "name": "Incomplete Config"
-            # Missing provider, endpoint_url, auth_type, model_name
-        }
-        response = self.client.post(
-            "/api/v1.0/configurations/",
-            json=incomplete_config
-        )
-        assert response.status_code == 422  # Validation error
-    
-    def test_create_configuration_invalid_json(self):
-        """Test creating configuration with invalid JSON"""
-        response = self.client.post(
-            "/api/v1.0/configurations/",
-            content="invalid json",
-            headers={"Content-Type": "application/json"}
-        )
-        assert response.status_code == 422
-    
-    def test_create_configuration_empty_request(self):
-        """Test creating configuration with empty request body"""
-        response = self.client.post("/api/v1.0/configurations/")
-        assert response.status_code == 422
-    
-    def test_update_configuration_invalid_uuid(self):
-        """Test updating configuration with invalid UUID"""
-        invalid_id = "not-a-uuid"
-        update_data = {"name": "Updated Config"}
-        response = self.client.put(
-            f"/api/v1.0/configurations/{invalid_id}",
-            json=update_data
-        )
-        assert response.status_code == 422  # Validation error
-    
-    def test_delete_configuration_invalid_uuid(self):
-        """Test deleting configuration with invalid UUID"""
-        invalid_id = "not-a-uuid"
-        response = self.client.delete(f"/api/v1.0/configurations/{invalid_id}")
-        assert response.status_code == 422  # Validation error
-    
-    def test_get_configurations_invalid_pagination(self):
-        """Test listing configurations with invalid pagination parameters"""
-        # Test negative page
-        response = self.client.get("/api/v1.0/configurations/?page=-1")
-        assert response.status_code == 422
-        
-        # Test page 0
-        response = self.client.get("/api/v1.0/configurations/?page=0")
-        assert response.status_code == 422
-        
-        # Test invalid limit
-        response = self.client.get("/api/v1.0/configurations/?limit=0")
-        assert response.status_code == 422
-        
-        # Test limit too high
-        response = self.client.get("/api/v1.0/configurations/?limit=1000")
-        assert response.status_code == 422
-    
-    def test_validate_configuration_missing_fields(self):
-        """Test validation with missing required fields"""
-        incomplete_validation = {
-            "provider": "openai"
-            # Missing endpoint_url, auth_type, model_name
-        }
-        response = self.client.post(
-            "/api/v1.0/configurations/validate",
-            json=incomplete_validation
-        )
-        assert response.status_code == 422

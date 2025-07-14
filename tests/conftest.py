@@ -20,6 +20,15 @@ class ForceEquals:
 
 @pytest.fixture(autouse=True)
 def setup_and_teardown(request: pytest.FixtureRequest):
+    # Only apply this fixture to test classes that need FastAPI app setup
+    # Skip for unit test classes that don't use the app
+    test_class_name = request.instance.__class__.__name__ if request.instance else ""
+    
+    # Skip for pure unit test classes
+    if test_class_name in ["TestAIConnectionService"]:
+        yield
+        return
+    
     # Setup
     request.instance.app = server.app  # type: ignore
     request.instance.client = TestClient(server.app)  # type: ignore

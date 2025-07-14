@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source:*)",
+      "Bash(python -m pytest tests/api/api_v1/test_configurations.py::TestConfigurationErrorCases -v --tb=no -q)",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest tests/api/api_v1/test_configurations.py::TestConfigurationValidation::test_validate_invalid_config_missing_fields -v)",
+      "Bash(python -m pytest tests/api/api_v1/test_configurations.py -v)",
+      "Bash(python -m pytest --tb=short)",
+      "Bash(python -m pytest tests/modules/test_ai_connection_service.py -v -s)",
+      "Bash(python -m pytest tests/modules/test_ai_connection_service.py -v)"
+    ],
+    "deny": []
+  }
+}

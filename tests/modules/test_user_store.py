@@ -153,7 +153,7 @@ class TestUserStore(unittest.TestCase):
     def test_create_without_id(self):
         """Test user creation when user doesn't have an ID."""
         user_without_id = User(
-            email="new@example.com",
+            email="goricoaico+new@gmail.com",
             full_name="New User",
             password="hashed_password",
             group=self.test_group_id
