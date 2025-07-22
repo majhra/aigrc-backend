@@ -150,12 +150,14 @@ class TestExecutedTestStore(unittest.TestCase):
         self.assertEqual(execution.error.message, "Test failed")
         self.assertIsNone(execution.error.details)
         self.assertIsNone(execution.benchmarks)
+        self.assertEqual(execution.validation_status, "ERROR")
         
         # Verify error data is stored correctly
         stored = self.executed_test_store.get(execution.id)
         self.assertEqual(stored.error.code, "ERROR_001")
         self.assertEqual(stored.error.message, "Test failed")
         self.assertIsNone(stored.error.details)
+        self.assertEqual(stored.validation_status, "ERROR")
 
     def test_create_execution_with_complex_input(self):
         """Test creating an execution with complex input data"""

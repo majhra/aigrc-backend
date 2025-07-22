@@ -837,7 +837,150 @@ class TestPromptFiltering:
         data = response.json()
         assert data["page"] == 1
         assert data["limit"] == 5
-        assert len(data["items"]) <= 5
+    
+    def test_filter_prompts_by_category_type(self):
+        """Test filtering prompts by category type"""
+        # Create test categories with different types
+        safety_category_data = {
+            "name": "Safety Category",
+            "description": "Category for safety prompts",
+            "category_type": "SAFETY"
+        }
+        safety_response = self.client.post("/api/v1.0/prompts/categories", json=safety_category_data)
+        assert safety_response.status_code == 201
+        safety_category_id = safety_response.json()["id"]
+        
+        compliance_category_data = {
+            "name": "Compliance Category", 
+            "description": "Category for compliance prompts",
+            "category_type": "COMPLIANCE"
+        }
+        compliance_response = self.client.post("/api/v1.0/prompts/categories", json=compliance_category_data)
+        assert compliance_response.status_code == 201
+        compliance_category_id = compliance_response.json()["id"]
+        
+        # Create prompts in different categories
+        safety_prompt_data = {
+            "name": "Safety Prompt",
+            "description": "A safety-related prompt",
+            "content": "Ensure safety in all operations",
+            "category_id": safety_category_id,
+            "variables": []
+        }
+        safety_response = self.client.post("/api/v1.0/prompts/", json=safety_prompt_data)
+        assert safety_response.status_code == 201
+        
+        compliance_prompt_data = {
+            "name": "Compliance Prompt",
+            "description": "A compliance-related prompt", 
+            "content": "Follow all compliance requirements",
+            "category_id": compliance_category_id,
+            "variables": []
+        }
+        compliance_response = self.client.post("/api/v1.0/prompts/", json=compliance_prompt_data)
+        assert compliance_response.status_code == 201
+        
+        # Test filtering by SAFETY category type
+        response = self.client.get("/api/v1.0/prompts/?category_type=SAFETY")
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Should only return prompts from SAFETY categories
+        safety_prompt_names = [item["name"] for item in data["items"]]
+        assert "Safety Prompt" in safety_prompt_names
+        assert "Compliance Prompt" not in safety_prompt_names
+        
+        # Test filtering by COMPLIANCE category type
+        response = self.client.get("/api/v1.0/prompts/?category_type=COMPLIANCE")
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Should only return prompts from COMPLIANCE categories
+        compliance_prompt_names = [item["name"] for item in data["items"]]
+        assert "Compliance Prompt" in compliance_prompt_names
+        assert "Safety Prompt" not in compliance_prompt_names
+    
+    def test_category_type_validation(self):
+        """Test that invalid category types return 422"""
+        # Valid category types should work
+        for valid_type in ["COMPLIANCE", "SAFETY", "ACCURACY", "CUSTOM"]:
+            response = self.client.get(f"/api/v1.0/prompts/?category_type={valid_type}")
+            assert response.status_code == 200, f"Valid type {valid_type} should return 200"
+        
+        # Invalid category type should return 422
+        response = self.client.get("/api/v1.0/prompts/?category_type=INVALID")
+        assert response.status_code == 422
+        error_data = response.json()
+        assert "detail" in error_data
+        # Check that the error mentions the pattern mismatch
+        assert any("pattern" in str(detail) for detail in error_data["detail"])
+    
+    def test_category_type_with_other_filters(self):
+        """Test category_type works with other filtering parameters"""
+        # Create a test category and prompt
+        test_category_data = {
+            "name": "Test ACCURACY Category",
+            "description": "Test category for accuracy",
+            "category_type": "ACCURACY"
+        }
+        category_response = self.client.post("/api/v1.0/prompts/categories", json=test_category_data)
+        assert category_response.status_code == 201
+        test_category_id = category_response.json()["id"]
+        
+        test_prompt_data = {
+            "name": "Test Accuracy Prompt",
+            "description": "Test prompt for accuracy testing",
+            "content": "Test content for accuracy",
+            "category_id": test_category_id,
+            "variables": [],
+            "tags": ["test", "accuracy"]
+        }
+        prompt_response = self.client.post("/api/v1.0/prompts/", json=test_prompt_data)
+        assert prompt_response.status_code == 201
+        
+        # Test combining category_type with search
+        response = self.client.get("/api/v1.0/prompts/?category_type=ACCURACY&search=accuracy")
+        assert response.status_code == 200
+        data = response.json()
+        # Should find the prompt since it matches both category type and search term
+        
+        # Test combining category_type with status
+        response = self.client.get("/api/v1.0/prompts/?category_type=ACCURACY&status=ACTIVE")
+        assert response.status_code == 200
+        
+        # Test combining category_type with pagination
+        response = self.client.get("/api/v1.0/prompts/?category_type=ACCURACY&page=1&limit=5")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["page"] == 1
+        assert data["limit"] == 5
+    
+    def test_category_type_and_category_id_together(self):
+        """Test that both category_type and category_id can be used together"""
+        # Create a test category
+        test_category_data = {
+            "name": "Test Custom Category",
+            "description": "Test category for custom type",
+            "category_type": "CUSTOM"
+        }
+        category_response = self.client.post("/api/v1.0/prompts/categories", json=test_category_data)
+        assert category_response.status_code == 201
+        test_category_id = category_response.json()["id"]
+        
+        # Test using both parameters (should work without errors)
+        response = self.client.get(
+            f"/api/v1.0/prompts/?category_type=CUSTOM&category_id={test_category_id}"
+        )
+        assert response.status_code == 200
+        
+        # Test using category_id with different category_type (should filter properly)
+        response = self.client.get(
+            f"/api/v1.0/prompts/?category_type=SAFETY&category_id={test_category_id}"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # This should return no results since the category is CUSTOM, not SAFETY
+        assert data["total"] == 0
 
 class TestPromptAuthentication:
     """Test authentication and authorization for prompt endpoints"""

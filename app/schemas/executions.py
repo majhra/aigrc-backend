@@ -60,7 +60,7 @@ class ExecutedTestSchema(BaseModel):
     benchmarks: Optional[PerformanceMetrics] = None
     
     # Validation Information
-    validation_status: Literal["PENDING", "IN_PROGRESS", "VALIDATED"] = "PENDING"
+    validation_status: Literal["PENDING", "IN_PROGRESS", "VALIDATED", "ERROR"] = "PENDING"
     validations: List[ValidationEvent] = []
     
     # Error Information

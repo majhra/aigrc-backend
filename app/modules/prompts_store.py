@@ -116,7 +116,7 @@ class PromptCategoryStore:
 class PromptStore:
     def __init__(self, store: StoreProtocol = None):
         self._store = store or LocalStore()
-
+    
     def get(self, prompt_id: str) -> Optional[Prompt]:
         data = self._store.get(prompt_id)
         if not data:
@@ -133,9 +133,11 @@ class PromptStore:
         limit: int = 10,
         status: Optional[str] = None,
         category_id: Optional[str] = None,
+        category_type: Optional[str] = None,
         risk_level: Optional[str] = None,
         search: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        category_store=None,
     ) -> tuple[List[Prompt], int]:
         keys = self._store.keys()
         if not keys:
@@ -152,6 +154,14 @@ class PromptStore:
             prompts = [p for p in prompts if p.status == status]
         if category_id:
             prompts = [p for p in prompts if str(p.category_id) == str(category_id)]
+        if category_type and category_store:
+            # Get all categories with the specified type
+            matching_categories, _ = category_store.list()
+            matching_category_ids = [
+                str(cat.id) for cat in matching_categories 
+                if cat.category_type == category_type
+            ]
+            prompts = [p for p in prompts if str(p.category_id) in matching_category_ids]
         if risk_level:
             prompts = [p for p in prompts if p.risk_level == risk_level]
         if search:

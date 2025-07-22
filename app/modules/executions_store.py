@@ -146,6 +146,9 @@ class ExecutedTestStore:
                 # Already an ErrorDetails object
                 error_obj = error
         
+        # Set validation status based on error presence
+        validation_status = "ERROR" if error_obj else "PENDING"
+        
         new_execution = ExecutedTestSchema(
             id=execution_id,
             test_id=test_id,
@@ -157,7 +160,7 @@ class ExecutedTestStore:
             response=response,
             benchmarks=benchmarks_obj,
             error=error_obj,
-            validation_status="PENDING",
+            validation_status=validation_status,
             validations=[]
         )
         

@@ -247,12 +247,12 @@ class RedisStore(StoreProtocol):
 
     def keys(self):
         """Returns all UUIDs in the Redis database"""
-        self.logger.info("Redis keys called")
+        self.logger.info(f"Redis keys called for {self.redis_set_name}")
         try:
             # Get all UUIDs from the sorted set
             keys = self.redis.zrange(self.redis_set_name, 0, -1)
             keys_decoded = [key.decode("utf-8") for key in keys]
-            self.logger.info("Redis keys complete")
+            # self.logger.info("Redis keys complete")
             return keys_decoded
         except Exception as e:
             self.logger.error(f"Redis fetch keys fail: {e}")

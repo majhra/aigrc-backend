@@ -145,11 +145,13 @@ async def get_prompts(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     status: Optional[str] = Query(None, pattern="^(DRAFT|ACTIVE|ARCHIVED)$"),
-    category_id: Optional[UUID4] = Query(None),
+    category_id: Optional[UUID4] = Query(None, description="Filter by specific category UUID"),
+    category_type: Optional[str] = Query(None, pattern="^(COMPLIANCE|SAFETY|ACCURACY|CUSTOM)$", description="Filter by category type"),
     risk_level: Optional[str] = Query(None, pattern="^(LOW|MEDIUM|HIGH)$"),
     search: Optional[str] = Query(None),
     tags: Optional[List[str]] = Query(None),
     prompt_store: PromptStore = Depends(deps.get_prompt_store),
+    category_store: PromptCategoryStore = Depends(deps.get_category_store),
     logger: TLogger = Depends(deps.get_logger),
 ):
     """
@@ -162,9 +164,11 @@ async def get_prompts(
         limit=limit,
         status=status,
         category_id=str(category_id) if category_id else None,
+        category_type=category_type,
         risk_level=risk_level,
         search=search,
-        tags=tags
+        tags=tags,
+        category_store=category_store
     )
     
     return PromptList(

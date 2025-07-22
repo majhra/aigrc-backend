@@ -8,7 +8,13 @@
       "Bash(python -m pytest tests/api/api_v1/test_configurations.py -v)",
       "Bash(python -m pytest --tb=short)",
       "Bash(python -m pytest tests/modules/test_ai_connection_service.py -v -s)",
-      "Bash(python -m pytest tests/modules/test_ai_connection_service.py -v)"
+      "Bash(python -m pytest tests/modules/test_ai_connection_service.py -v)",
+      "Bash(python -m pytest tests/api/api_v1/test_prompts.py::TestPromptFiltering -v)",
+      "Bash(python -m pytest tests/api/api_v1/test_prompts.py::TestPromptFiltering::test_filter_prompts_by_category_type -v)",
+      "Bash(python -m pytest tests/api/api_v1/test_prompts.py::TestPromptFiltering::test_category_type_validation -v)",
+      "Bash(python -m pytest tests/api/api_v1/test_prompts.py::TestPromptFiltering::test_category_type_with_other_filters tests/api/api_v1/test_prompts.py::TestPromptFiltering::test_category_type_and_category_id_together -v)",
+      "Bash(python -m pytest tests/api/api_v1/test_prompts.py -v)",
+      "Bash(python -m pytest --lf)"
     ],
     "deny": []
   }
