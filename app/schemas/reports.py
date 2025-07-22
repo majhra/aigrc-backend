@@ -32,6 +32,7 @@ class ExecutionSummaryMetrics(BaseModel):
     pending_validations: int = Field(..., description="Number of executions pending validation")
     in_progress_validations: int = Field(..., description="Number of executions with validation in progress")
     validated_executions: int = Field(..., description="Number of validated executions")
+    error_validations: int = Field(..., description="Number of executions with validation errors")
     
     # Validation results
     passed_validations: int = Field(..., description="Number of passed validations")

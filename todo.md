@@ -25,3 +25,131 @@
 
 
 [ ] - investigate handling other things than llm results - marketing images, emails etc etc
+
+
+# Reporting Update
+1. Add ERROR Validation Status Tracking
+
+  - Endpoint: GET /api/v1.0/reports/summary
+  - Schema: ExecutionSummaryMetrics in OpenAPI components
+  - Required Changes:
+    - Add error_validations: integer field to
+  ExecutionSummaryMetrics schema
+    - Update database aggregation queries to count
+  validation_status = 'ERROR'
+    - Ensure the field is included in response payload
+
+  2. Fix Success Rate Calculation Bug
+
+  - Endpoint: GET /api/v1.0/reports/performance
+  - Schema: TestPerformanceMetrics.success_rate
+  - Current Issue: Shows 100% when only 1/10 executions validated
+  - Required Fix:
+  -- Current (incorrect): success_rate = passed_validations / 
+  validated_executions
+  -- Should be: success_rate = passed_validations / 
+  total_executions
+  -- OR: success_rate = passed_validations / (passed + failed + 
+  error) 
+  -- AND: success_rate = NULL when no validations completed
+
+  3. Update Summary Report Endpoint
+
+  - Endpoint: GET /api/v1.0/reports/summary
+  - Changes:
+    - Include error_validations count in response
+    - Verify all validation statuses sum to total_executions
+    - Test aggregation logic with mixed validation statuses
+
+  4. Validate Status Counting Logic
+
+  - Database Queries: Ensure proper counting of all 4 validation
+  statuses:
+    - PENDING → pending_validations
+    - IN_PROGRESS → in_progress_validations
+    - VALIDATED → validated_executions (then split into
+  passed/failed)
+    - ERROR → error_validations (NEW)
+
+  🔧 Medium Priority - Improvements
+
+  5. Clarify Acceptance Rate Calculation
+
+  - Field: ExecutionSummaryMetrics.acceptance_rate
+  - Required: Document the calculation methodology
+  - Options:
+    - passed_validations / total_executions * 100
+    - passed_validations / validated_executions * 100
+    - passed_validations / (validated_executions - 
+  error_validations) * 100
+
+  6. Update OpenAPI Documentation
+
+  - File: OpenAPI schema components
+  - Changes:
+    - Add error_validations field documentation
+    - Update field descriptions for clarity
+    - Add examples with all validation statuses
+
+  📊 Low Priority - Enhancements
+
+  7. Enhanced Performance Metrics
+
+  - Endpoint: GET /api/v1.0/reports/performance
+  - Potential Addition: Add validation status breakdown per test:
+  {
+    "test_id": "uuid",
+    "validation_breakdown": {
+      "pending": 5,
+      "in_progress": 2,
+      "passed": 8,
+      "failed": 1,
+      "error": 1
+    }
+  }
+
+  🧪 Testing Requirements
+
+  8. Database Query Testing
+
+  - Test Cases:
+    - Mixed validation statuses for single test
+    - ERROR status aggregation in reports
+    - Edge cases: all pending, all error, no executions
+    - Performance with large datasets
+
+  📋 Implementation Checklist
+
+## Code Analysis Findings:
+
+✅ **Current Issues Confirmed:**
+1. ExecutionSummaryMetrics schema missing `error_validations` field (app/schemas/reports.py:27-44)
+2. Success rate bug: uses `passed_count / validated_executions` instead of `passed_count / total_executions` (app/modules/reports_store.py:167,314)  
+3. Missing ERROR status counting in _calculate_execution_metrics (app/modules/reports_store.py:407-411)
+4. Only counts 3 validation statuses instead of 4 (PENDING, IN_PROGRESS, VALIDATED, ERROR)
+
+✅ **Files to Update:**
+- app/schemas/reports.py (add error_validations field)
+- app/modules/reports_store.py (fix calculations and counting)
+- tests/ (comprehensive validation testing)
+
+✅ **Implementation Order:**
+1. ✅ Schema updates (ExecutionSummaryMetrics) - COMPLETED
+2. ✅ Store logic fixes (status counting, success rate calculation) - COMPLETED
+3. ✅ Testing with mixed validation statuses - COMPLETED
+4. ✅ Documentation updates - COMPLETED
+
+## ✅ IMPLEMENTATION COMPLETE
+
+**Changes Made:**
+1. Added `error_validations` field to `ExecutionSummaryMetrics` schema (app/schemas/reports.py:35)
+2. Fixed success rate calculation to use `total_executions` instead of `validated_executions` (app/modules/reports_store.py:167,314)
+3. Updated `_calculate_execution_metrics` to count ERROR status (app/modules/reports_store.py:408)
+4. Fixed acceptance rate calculation for consistency (app/modules/reports_store.py:424)
+5. Added comprehensive tests for all validation statuses including edge cases
+
+**Verification:**
+- All 12 reports store tests passing ✅
+- All 14 reports API tests passing ✅
+- Mixed validation status scenarios tested ✅
+- Success rate calculation edge cases tested ✅

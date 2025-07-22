@@ -158,15 +158,13 @@ class ReportsStore:
             validated_executions = [ex for ex in executions if ex.validation_status == "VALIDATED"]
             
             # Calculate success rate
-            if validated_executions:
-                passed_count = sum(
-                    1 for ex in validated_executions
-                    for validation in ex.validations
-                    if validation.status == "PASS"
-                )
-                success_rate = (passed_count / len(validated_executions)) * 100
-            else:
-                success_rate = 0.0
+            passed_count = sum(
+                1 for ex in validated_executions
+                for validation in ex.validations
+                if validation.status == "PASS"
+            )
+            # Success rate should be based on total executions, not just validated ones
+            success_rate = (passed_count / total_executions) * 100 if total_executions > 0 else 0.0
             
             # Calculate average response time
             response_times = []
@@ -305,15 +303,13 @@ class ReportsStore:
             validated_executions = [ex for ex in executions if ex.validation_status == "VALIDATED"]
             
             # Calculate success rate
-            if validated_executions:
-                passed_count = sum(
-                    1 for ex in validated_executions
-                    for validation in ex.validations
-                    if validation.status == "PASS"
-                )
-                success_rate = (passed_count / len(validated_executions)) * 100
-            else:
-                success_rate = 0.0
+            passed_count = sum(
+                1 for ex in validated_executions
+                for validation in ex.validations
+                if validation.status == "PASS"
+            )
+            # Success rate should be based on total executions, not just validated ones
+            success_rate = (passed_count / total_executions) * 100 if total_executions > 0 else 0.0
             
             # Calculate average response time
             response_times = []
@@ -409,6 +405,7 @@ class ReportsStore:
         pending_validations = status_counts.get("PENDING", 0)
         in_progress_validations = status_counts.get("IN_PROGRESS", 0)
         validated_executions = status_counts.get("VALIDATED", 0)
+        error_validations = status_counts.get("ERROR", 0)
         
         # Validation results
         validated_exes = [ex for ex in all_executions if ex.validation_status == "VALIDATED"]
@@ -422,9 +419,9 @@ class ReportsStore:
                 elif validation.status == "FAIL":
                     failed_validations += 1
         
-        # Calculate acceptance rate
-        total_validations = passed_validations + failed_validations
-        acceptance_rate = (passed_validations / total_validations * 100) if total_validations > 0 else 0.0
+        # Calculate acceptance rate based on total executions for consistency
+        # This gives the overall success rate across all executions
+        acceptance_rate = (passed_validations / total_executions * 100) if total_executions > 0 else 0.0
         
         # Recent activity
         recent_executions_7 = [ex for ex in all_executions if ex.executed_at >= seven_days_ago]
@@ -435,6 +432,7 @@ class ReportsStore:
             pending_validations=pending_validations,
             in_progress_validations=in_progress_validations,
             validated_executions=validated_executions,
+            error_validations=error_validations,
             passed_validations=passed_validations,
             failed_validations=failed_validations,
             acceptance_rate=acceptance_rate,

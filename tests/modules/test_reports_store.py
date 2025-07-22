@@ -372,4 +372,232 @@ class TestReportsStore(unittest.TestCase):
         self.assertEqual(metrics.validated_executions, 1)
         self.assertEqual(metrics.passed_validations, 1)
         self.assertEqual(metrics.failed_validations, 0)
-        self.assertEqual(metrics.acceptance_rate, 100.0) 
+        self.assertEqual(metrics.acceptance_rate, 50.0)  # 1 passed out of 2 total executions
+
+    def test_calculate_execution_metrics_all_validation_statuses(self):
+        """Test execution metrics calculation with all 4 validation statuses."""
+        # Create test
+        test = self.tests_store.create(self.test_data, self.test_user)
+        
+        execution_create = ExecutedTestCreate(
+            execution_environment=ExecutionEnvironment(
+                environment_id="test-env",
+                version="1.0.0"
+            )
+        )
+        
+        # Create executions with all validation statuses
+        # 1. PENDING execution
+        pending_exec = self.executions_store.create(
+            str(test.id), execution_create, self.test_user,
+            "Pending Test", "Pending Response"
+        )
+        
+        # 2. IN_PROGRESS execution
+        in_progress_exec = self.executions_store.create(
+            str(test.id), execution_create, self.test_user,
+            "In Progress Test", "In Progress Response"
+        )
+        # Manually set validation status
+        exec_data = self.executions_store._store.get(str(in_progress_exec.id))
+        exec_data["validation_status"] = "IN_PROGRESS"
+        self.executions_store._store.put(str(in_progress_exec.id), exec_data)
+        
+        # 3. VALIDATED execution with PASS
+        validated_pass_exec = self.executions_store.create(
+            str(test.id), execution_create, self.test_user,
+            "Validated Pass Test", "Validated Pass Response"
+        )
+        validation_event_pass = {
+            "validator_id": str(uuid4()),
+            "validator_type": "HUMAN",
+            "status": "PASS",
+            "timestamp": datetime.now(timezone.utc),
+            "notes": "Pass validation"
+        }
+        self.executions_store.add_validation(str(validated_pass_exec.id), validation_event_pass)
+        
+        # 4. VALIDATED execution with FAIL
+        validated_fail_exec = self.executions_store.create(
+            str(test.id), execution_create, self.test_user,
+            "Validated Fail Test", "Validated Fail Response"
+        )
+        validation_event_fail = {
+            "validator_id": str(uuid4()),
+            "validator_type": "HUMAN",
+            "status": "FAIL",
+            "timestamp": datetime.now(timezone.utc),
+            "notes": "Fail validation"
+        }
+        self.executions_store.add_validation(str(validated_fail_exec.id), validation_event_fail)
+        
+        # 5. ERROR execution
+        error_exec = self.executions_store.create(
+            str(test.id), execution_create, self.test_user,
+            "Error Test", "Error Response"
+        )
+        # Manually set validation status to ERROR
+        exec_data = self.executions_store._store.get(str(error_exec.id))
+        exec_data["validation_status"] = "ERROR"
+        self.executions_store._store.put(str(error_exec.id), exec_data)
+        
+        # Get all tests
+        tests, _ = self.tests_store.list(page=1, limit=10000)
+        
+        # Calculate metrics
+        metrics = self.reports_store._calculate_execution_metrics(tests, self.test_user)
+        
+        # Verify metrics
+        self.assertEqual(metrics.total_executions, 5)
+        self.assertEqual(metrics.pending_validations, 1)
+        self.assertEqual(metrics.in_progress_validations, 1)
+        self.assertEqual(metrics.validated_executions, 2)  # Both PASS and FAIL
+        self.assertEqual(metrics.error_validations, 1)
+        self.assertEqual(metrics.passed_validations, 1)
+        self.assertEqual(metrics.failed_validations, 1)
+        # Acceptance rate: 1 passed out of 5 total = 20%
+        self.assertEqual(metrics.acceptance_rate, 20.0)
+        
+        # Verify all statuses sum to total
+        status_sum = (metrics.pending_validations + 
+                     metrics.in_progress_validations + 
+                     metrics.validated_executions + 
+                     metrics.error_validations)
+        self.assertEqual(status_sum, metrics.total_executions)
+
+    def test_success_rate_calculation_edge_cases(self):
+        """Test success rate calculation edge cases."""
+        # Create test
+        test = self.tests_store.create(self.test_data, self.test_user)
+        
+        execution_create = ExecutedTestCreate(
+            execution_environment=ExecutionEnvironment(
+                environment_id="test-env",
+                version="1.0.0"
+            )
+        )
+        
+        # Test case 1: Only pending executions (no validations completed)
+        for i in range(3):
+            self.executions_store.create(
+                str(test.id), execution_create, self.test_user,
+                f"Pending Test {i}", f"Pending Response {i}"
+            )
+        
+        report = self.reports_store.get_performance_report(self.test_user)
+        metric = report.performance_metrics[0]
+        # No validations completed, success rate should be 0
+        self.assertEqual(metric.success_rate, 0.0)
+        
+        # Test case 2: Mix of statuses but no PASS validations
+        error_exec = self.executions_store.create(
+            str(test.id), execution_create, self.test_user,
+            "Error Test", "Error Response"
+        )
+        exec_data = self.executions_store._store.get(str(error_exec.id))
+        exec_data["validation_status"] = "ERROR"
+        self.executions_store._store.put(str(error_exec.id), exec_data)
+        
+        fail_exec = self.executions_store.create(
+            str(test.id), execution_create, self.test_user,
+            "Fail Test", "Fail Response"
+        )
+        validation_event_fail = {
+            "validator_id": str(uuid4()),
+            "validator_type": "HUMAN",
+            "status": "FAIL",
+            "timestamp": datetime.now(timezone.utc),
+            "notes": "Fail validation"
+        }
+        self.executions_store.add_validation(str(fail_exec.id), validation_event_fail)
+        
+        report = self.reports_store.get_performance_report(self.test_user)
+        metric = report.performance_metrics[0]
+        # 0 passed out of 5 total = 0%
+        self.assertEqual(metric.success_rate, 0.0)
+
+    def test_summary_report_with_mixed_statuses(self):
+        """Test summary report generation with mixed validation statuses."""
+        # Create test group
+        group = self.group_store.create(
+            GroupCreate(name="Test Group", description="Test group"),
+            self.test_user
+        )
+        self.test_user.group = str(group.id)
+        
+        # Create test
+        test = self.tests_store.create(self.test_data, self.test_user)
+        
+        execution_create = ExecutedTestCreate(
+            execution_environment=ExecutionEnvironment(
+                environment_id="test-env",
+                version="1.0.0"
+            )
+        )
+        
+        # Create executions with different statuses
+        # 2 PENDING
+        for i in range(2):
+            self.executions_store.create(
+                str(test.id), execution_create, self.test_user,
+                f"Pending {i}", f"Response {i}"
+            )
+        
+        # 1 ERROR
+        error_exec = self.executions_store.create(
+            str(test.id), execution_create, self.test_user,
+            "Error Test", "Error Response"
+        )
+        exec_data = self.executions_store._store.get(str(error_exec.id))
+        exec_data["validation_status"] = "ERROR"
+        self.executions_store._store.put(str(error_exec.id), exec_data)
+        
+        # 1 VALIDATED with PASS
+        pass_exec = self.executions_store.create(
+            str(test.id), execution_create, self.test_user,
+            "Pass Test", "Pass Response"
+        )
+        validation_event_pass = {
+            "validator_id": str(uuid4()),
+            "validator_type": "HUMAN",
+            "status": "PASS",
+            "timestamp": datetime.now(timezone.utc),
+            "notes": "Pass validation"
+        }
+        self.executions_store.add_validation(str(pass_exec.id), validation_event_pass)
+        
+        # 1 VALIDATED with FAIL
+        fail_exec = self.executions_store.create(
+            str(test.id), execution_create, self.test_user,
+            "Fail Test", "Fail Response"
+        )
+        validation_event_fail = {
+            "validator_id": str(uuid4()),
+            "validator_type": "HUMAN",
+            "status": "FAIL",
+            "timestamp": datetime.now(timezone.utc),
+            "notes": "Fail validation"
+        }
+        self.executions_store.add_validation(str(fail_exec.id), validation_event_fail)
+        
+        # Generate summary report
+        report = self.reports_store.get_summary_report(self.test_user)
+        
+        # Verify execution metrics
+        exec_metrics = report.execution_metrics
+        self.assertEqual(exec_metrics.total_executions, 5)
+        self.assertEqual(exec_metrics.pending_validations, 2)
+        self.assertEqual(exec_metrics.in_progress_validations, 0)
+        self.assertEqual(exec_metrics.validated_executions, 2)
+        self.assertEqual(exec_metrics.error_validations, 1)
+        self.assertEqual(exec_metrics.passed_validations, 1)
+        self.assertEqual(exec_metrics.failed_validations, 1)
+        # Acceptance rate: 1 passed out of 5 total = 20%
+        self.assertEqual(exec_metrics.acceptance_rate, 20.0)
+        
+        # Verify all statuses sum to total
+        status_sum = (exec_metrics.pending_validations + 
+                     exec_metrics.in_progress_validations + 
+                     exec_metrics.validated_executions + 
+                     exec_metrics.error_validations)
+        self.assertEqual(status_sum, exec_metrics.total_executions) 
