@@ -487,6 +487,108 @@ async def validate_execution(
             detail=f"Error adding validation: {str(e)}"
         )
 
+@router.get("/{test_id}/executions", response_model=ExecutedTestList)
+async def list_test_executions(
+    test_id: UUID,
+    current_user: Annotated[User, Depends(deps.get_current_active_user)],
+    execution_store: ExecutedTestStore = Depends(deps.get_execution_store),
+    test_store: AITestStore = Depends(deps.get_test_store),
+    logger: deps.TLogger = Depends(deps.get_logger),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    status: Optional[str] = Query(None, description="Filter by validation status (PENDING, IN_PROGRESS, VALIDATED, ERROR)"),
+    statuses: Optional[str] = Query(None, description="Filter by multiple validation statuses (comma-separated)"),
+    result: Optional[str] = Query(None, description="Filter by validation result (PASS, FAIL)"),
+    has_errors: Optional[bool] = Query(None, description="Filter by error presence"),
+    outstanding: bool = Query(False, description="Get outstanding tasks (PENDING and ERROR executions)")
+) -> ExecutedTestList:
+    """
+    List executions for a specific test with optional filtering.
+    
+    Useful for finding:
+    - Outstanding tasks: Use outstanding=true
+    - Pending executions: Use status=PENDING  
+    - Error executions: Use status=ERROR
+    - Multiple statuses: Use statuses=PENDING,ERROR
+    """
+    # Verify test exists and user has access
+    test = test_store.get(str(test_id))
+    if not test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and test.group_id != current_user.group:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Test does not belong to your group"
+        )
+    
+    # Handle outstanding tasks shortcut
+    if outstanding:
+        executions, total = execution_store.list_outstanding_tasks(
+            test_id=str(test_id),
+            page=page,
+            limit=limit
+        )
+    else:
+        # Parse comma-separated statuses if provided
+        statuses_list = None
+        if statuses:
+            statuses_list = [s.strip().upper() for s in statuses.split(',')]
+            # Validate statuses
+            valid_statuses = {"PENDING", "IN_PROGRESS", "VALIDATED", "ERROR"}
+            for s in statuses_list:
+                if s not in valid_statuses:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid status '{s}'. Valid statuses: {', '.join(valid_statuses)}"
+                    )
+        
+        # Validate single status if provided
+        if status:
+            status_upper = status.upper()
+            valid_statuses = {"PENDING", "IN_PROGRESS", "VALIDATED", "ERROR"}
+            if status_upper not in valid_statuses:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid status '{status}'. Valid statuses: {', '.join(valid_statuses)}"
+                )
+            status = status_upper
+        
+        # Validate result if provided
+        if result:
+            result_upper = result.upper()
+            valid_results = {"PASS", "FAIL"}
+            if result_upper not in valid_results:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid result '{result}'. Valid results: {', '.join(valid_results)}"
+                )
+            result = result_upper
+        
+        # Get filtered executions
+        executions, total = execution_store.list(
+            test_id=str(test_id),
+            page=page,
+            limit=limit,
+            status=status,
+            statuses=statuses_list,
+            result=result,
+            has_errors=has_errors
+        )
+    
+    logger.info(f"Retrieved {len(executions)} executions for test {test_id} (page {page}, total {total})")
+    
+    return ExecutedTestList(
+        items=executions,
+        total=total,
+        page=page,
+        limit=limit
+    )
+
 @router.get("/{test_id}/{execution_id}", response_model=TestExecutionDetail)
 async def get_test_execution(
     test_id: UUID,

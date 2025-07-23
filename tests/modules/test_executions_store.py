@@ -415,4 +415,122 @@ class TestExecutedTestStore(unittest.TestCase):
         retrieved_execution2 = self.executed_test_store.get(execution2.id)
         self.assertEqual(retrieved_execution2.benchmarks.response_time, 67.89)
         self.assertEqual(retrieved_execution2.benchmarks.total_time, 78.45)
-        self.assertEqual(retrieved_execution2.benchmarks.cost, 0.003) 
+        self.assertEqual(retrieved_execution2.benchmarks.cost, 0.003)
+
+    def test_enhanced_filtering_capabilities(self):
+        """Test the enhanced filtering capabilities with multiple statuses and error filtering."""
+        # Create executions with different statuses for filtering tests
+        test_id = str(uuid4())
+        
+        # Create PENDING execution
+        pending_exec = self.executed_test_store.create(
+            test_id=test_id,
+            execution=ExecutedTestCreate(),
+            user=self.test_user,
+            prompt="Pending test",
+            response="Pending response"
+        )
+        
+        # Create ERROR execution
+        error_exec = self.executed_test_store.create(
+            test_id=test_id,
+            execution=ExecutedTestCreate(),
+            user=self.test_user,
+            prompt="Error test",
+            response="Error response",
+            error={"code": "TEST_ERROR", "message": "Test error"}
+        )
+        
+        # Create VALIDATED execution
+        validated_exec = self.executed_test_store.create(
+            test_id=test_id,
+            execution=ExecutedTestCreate(),
+            user=self.test_user,
+            prompt="Validated test",
+            response="Validated response"
+        )
+        validation_event = {
+            "validator_id": str(uuid4()),
+            "validator_type": "HUMAN",
+            "status": "PASS",
+            "timestamp": datetime.now(timezone.utc),
+            "notes": "Test validation"
+        }
+        self.executed_test_store.add_validation(str(validated_exec.id), validation_event)
+        
+        # Test filtering by multiple statuses
+        executions, total = self.executed_test_store.list(
+            test_id=test_id,
+            statuses=["PENDING", "ERROR"]
+        )
+        self.assertEqual(total, 2)
+        statuses = [ex.validation_status for ex in executions]
+        self.assertIn("PENDING", statuses)
+        self.assertIn("ERROR", statuses)
+        
+        # Test filtering by error presence
+        executions_with_errors, total = self.executed_test_store.list(
+            test_id=test_id,
+            has_errors=True
+        )
+        self.assertEqual(total, 1)
+        self.assertEqual(executions_with_errors[0].validation_status, "ERROR")
+        self.assertIsNotNone(executions_with_errors[0].error)
+        
+        # Test filtering by no errors
+        executions_without_errors, total = self.executed_test_store.list(
+            test_id=test_id,
+            has_errors=False
+        )
+        self.assertEqual(total, 2)  # PENDING and VALIDATED executions
+        for ex in executions_without_errors:
+            self.assertIsNone(ex.error)
+
+    def test_list_outstanding_tasks(self):
+        """Test the convenience method for listing outstanding tasks."""
+        test_id = str(uuid4())
+        
+        # Create PENDING execution
+        self.executed_test_store.create(
+            test_id=test_id,
+            execution=ExecutedTestCreate(),
+            user=self.test_user,
+            prompt="Pending task",
+            response="Pending response"
+        )
+        
+        # Create ERROR execution
+        self.executed_test_store.create(
+            test_id=test_id,
+            execution=ExecutedTestCreate(),
+            user=self.test_user,
+            prompt="Error task",
+            response="Error response",
+            error={"code": "ERROR", "message": "Error"}
+        )
+        
+        # Create VALIDATED execution (should not be included)
+        validated_exec = self.executed_test_store.create(
+            test_id=test_id,
+            execution=ExecutedTestCreate(),
+            user=self.test_user,
+            prompt="Completed task",
+            response="Completed response"
+        )
+        validation_event = {
+            "validator_id": str(uuid4()),
+            "validator_type": "HUMAN",
+            "status": "PASS",
+            "timestamp": datetime.now(timezone.utc),
+            "notes": "Completed"
+        }
+        self.executed_test_store.add_validation(str(validated_exec.id), validation_event)
+        
+        # Test outstanding tasks
+        outstanding, total = self.executed_test_store.list_outstanding_tasks(test_id=test_id)
+        self.assertEqual(total, 2)  # Only PENDING and ERROR
+        
+        statuses = [ex.validation_status for ex in outstanding]
+        self.assertIn("PENDING", statuses)
+        self.assertIn("ERROR", statuses)
+        self.assertNotIn("VALIDATED", statuses) 

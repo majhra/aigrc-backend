@@ -363,14 +363,14 @@ app/
      - Request Body: Same as POST
    - `DELETE /api/v1.0/tests/{test_id}` - Delete test
 
-2. **Test Executions:**  (api/api_v1/endpoints/tests.py) - 🔄 PENDING
+2. **Test Executions:**  (api/api_v1/endpoints/tests.py) - Done
    - `GET /api/v1.0/tests/{test_id}/executions` - List test executions
      - Query Parameters:
        - `page`: Page number (default: 1)
        - `limit`: Items per page (default: 10)
        - `status`: Filter by validation status (PENDING, VALIDATED)
        - `result`: Filter by validation result (PASS, FAIL)
-   - `GET /api/v1.0/tests/{test_id}/executions/{execution_id}` - Get execution details
+   - `GET /api/v1.0/tests/{test_id}/{execution_id}` - Get execution details
    - `POST /api/v1.0/tests/{test_id}/execute` - Execute a test
      - Request Body:
        ```json

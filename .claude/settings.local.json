@@ -14,7 +14,9 @@
       "Bash(python -m pytest tests/api/api_v1/test_prompts.py::TestPromptFiltering::test_category_type_validation -v)",
       "Bash(python -m pytest tests/api/api_v1/test_prompts.py::TestPromptFiltering::test_category_type_with_other_filters tests/api/api_v1/test_prompts.py::TestPromptFiltering::test_category_type_and_category_id_together -v)",
       "Bash(python -m pytest tests/api/api_v1/test_prompts.py -v)",
-      "Bash(python -m pytest --lf)"
+      "Bash(python -m pytest --lf)",
+      "Bash(grep:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }

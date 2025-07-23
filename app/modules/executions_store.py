@@ -75,7 +75,9 @@ class ExecutedTestStore:
         page: int = 1,
         limit: int = 10,
         status: Optional[str] = None,
+        statuses: Optional[List[str]] = None,
         result: Optional[str] = None,
+        has_errors: Optional[bool] = None,
     ) -> Tuple[List[ExecutedTestSchema], int]:
         # Get all keys
         keys = self._store.keys()
@@ -96,8 +98,15 @@ class ExecutedTestStore:
                     # Apply filters
                     if status and execution.validation_status != status:
                         continue
+                    if statuses and execution.validation_status not in statuses:
+                        continue
                     if result and not any(v.status == result for v in execution.validations):
                         continue
+                    if has_errors is not None:
+                        if has_errors and not execution.error:
+                            continue
+                        if not has_errors and execution.error:
+                            continue
                     executions.append(execution)
             except Exception:
                 # Skip keys that can't be deserialized as ExecutedTestSchema
@@ -187,6 +196,23 @@ class ExecutedTestStore:
             execution.validation_status = "VALIDATED"
         self._store.put(execution_id, execution.model_dump())
         return execution
+
+    def list_outstanding_tasks(
+        self,
+        test_id: str,
+        page: int = 1,
+        limit: int = 10
+    ) -> Tuple[List[ExecutedTestSchema], int]:
+        """
+        Get executions that need attention (PENDING or ERROR status).
+        This is a convenience method for finding outstanding tasks.
+        """
+        return self.list(
+            test_id=test_id,
+            page=page,
+            limit=limit,
+            statuses=["PENDING", "ERROR"]
+        )
 
     def delete(self, execution_id: str) -> bool:
         # Get test_id before deleting
