@@ -14,8 +14,8 @@ class TokenUsage(BaseModel):
     total: int
 
 class PerformanceMetrics(BaseModel):
-    response_time: int  # milliseconds
-    total_time: int  # milliseconds
+    response_time: float  # milliseconds (can be fractional)
+    total_time: float  # milliseconds (can be fractional)
     token_usage: TokenUsage
     cost: Optional[float] = None
 

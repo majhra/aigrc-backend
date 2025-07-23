@@ -64,6 +64,7 @@ async def simulate_chat_completion(
     Simulates an OpenAI chat completion endpoint for testing purposes.
     Accepts any model name and requires API key '12345'.
     """
+    print(f"Received chat completion request: {request.json()}")
     # Validate API key
     if not authorization.startswith("Bearer "):
         raise HTTPException(
