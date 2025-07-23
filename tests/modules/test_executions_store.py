@@ -347,4 +347,72 @@ class TestExecutedTestStore(unittest.TestCase):
             "message": "Test passed",
             "timestamp": datetime.now(timezone.utc)
         }
-        self.assertIsNone(self.executed_test_store.add_validation(str(uuid4()), validation)) 
+        self.assertIsNone(self.executed_test_store.add_validation(str(uuid4()), validation))
+
+    def test_execution_metrics_with_float_values(self):
+        """Test that execution metrics with float values are saved and retrieved correctly."""
+        # Performance metrics with float values (like from simulation endpoint)
+        float_benchmarks = PerformanceMetrics(
+            response_time=35.76,  # Float value that was causing the error
+            total_time=42.15,     # Float value  
+            token_usage=TokenUsage(prompt=25, completion=15, total=40),
+            cost=0.0025
+        )
+        
+        # Create execution with float metrics
+        execution = self.executed_test_store.create(
+            test_id=self.test_id,
+            execution=ExecutedTestCreate(),
+            user=self.test_user,
+            prompt="Test prompt for simulation",
+            response="This is a simulated response",
+            benchmarks=float_benchmarks
+        )
+        
+        # Verify metrics are saved correctly
+        self.assertIsNotNone(execution.benchmarks)
+        self.assertEqual(execution.benchmarks.response_time, 35.76)
+        self.assertEqual(execution.benchmarks.total_time, 42.15)
+        self.assertEqual(execution.benchmarks.cost, 0.0025)
+        self.assertEqual(execution.benchmarks.token_usage.prompt, 25)
+        self.assertEqual(execution.benchmarks.token_usage.completion, 15)
+        self.assertEqual(execution.benchmarks.token_usage.total, 40)
+        
+        # Retrieve execution from storage to verify persistence
+        retrieved_execution = self.executed_test_store.get(execution.id)
+        
+        # Verify retrieved execution has correct metrics
+        self.assertIsNotNone(retrieved_execution)
+        self.assertIsNotNone(retrieved_execution.benchmarks)
+        self.assertEqual(retrieved_execution.benchmarks.response_time, 35.76)
+        self.assertEqual(retrieved_execution.benchmarks.total_time, 42.15)
+        self.assertEqual(retrieved_execution.benchmarks.cost, 0.0025)
+        self.assertEqual(retrieved_execution.benchmarks.token_usage.prompt, 25)
+        self.assertEqual(retrieved_execution.benchmarks.token_usage.completion, 15)
+        self.assertEqual(retrieved_execution.benchmarks.token_usage.total, 40)
+        
+        # Test with dictionary input (like from API)
+        dict_metrics = {
+            "response_time": 67.89,  # Float value
+            "total_time": 78.45,     # Float value
+            "token_usage": {
+                "prompt": 30,
+                "completion": 20,
+                "total": 50
+            },
+            "cost": 0.003
+        }
+        
+        execution2 = self.executed_test_store.create(
+            test_id=self.test_id,
+            execution=ExecutedTestCreate(),
+            user=self.test_user,
+            prompt="Test with dict metrics",
+            response="Dict response",
+            benchmarks=dict_metrics
+        )
+        
+        retrieved_execution2 = self.executed_test_store.get(execution2.id)
+        self.assertEqual(retrieved_execution2.benchmarks.response_time, 67.89)
+        self.assertEqual(retrieved_execution2.benchmarks.total_time, 78.45)
+        self.assertEqual(retrieved_execution2.benchmarks.cost, 0.003) 
