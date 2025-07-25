@@ -45,18 +45,21 @@ def setup_and_teardown(request: pytest.FixtureRequest):
     yield
 
     # Teardown
-    request.instance.app.dependency_overrides = {}  # type: ignore
-    # Clean up user store by getting all keys from the underlying store
-    underlying_store = request.instance.user_store._store  # type: ignore
-    keys = underlying_store.keys()  # type: ignore
-    for key in keys:  # type: ignore
-        underlying_store.pop(key)  # type: ignore
-    
-    # Clean up group store by getting all keys from the underlying store
-    group_underlying_store = request.instance.group_store._store  # type: ignore
-    group_keys = group_underlying_store.keys()  # type: ignore
-    for key in group_keys:  # type: ignore
-        group_underlying_store.pop(key)  # type: ignore
+    if request.instance and hasattr(request.instance, 'app') and request.instance.app:
+        request.instance.app.dependency_overrides = {}  # type: ignore
+        # Clean up user store by getting all keys from the underlying store
+        if hasattr(request.instance, 'user_store') and request.instance.user_store:
+            underlying_store = request.instance.user_store._store  # type: ignore
+            keys = underlying_store.keys()  # type: ignore
+            for key in keys:  # type: ignore
+                underlying_store.pop(key)  # type: ignore
+        
+        # Clean up group store by getting all keys from the underlying store
+        if hasattr(request.instance, 'group_store') and request.instance.group_store:
+            group_underlying_store = request.instance.group_store._store  # type: ignore
+            group_keys = group_underlying_store.keys()  # type: ignore
+            for key in group_keys:  # type: ignore
+                group_underlying_store.pop(key)  # type: ignore
 
 
 @pytest.fixture

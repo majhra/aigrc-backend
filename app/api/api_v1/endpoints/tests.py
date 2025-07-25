@@ -496,7 +496,7 @@ async def list_test_executions(
     logger: deps.TLogger = Depends(deps.get_logger),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
-    status: Optional[str] = Query(None, description="Filter by validation status (PENDING, IN_PROGRESS, VALIDATED, ERROR)"),
+    validation_status: Optional[str] = Query(None, description="Filter by validation status (PENDING, IN_PROGRESS, VALIDATED, ERROR)"),
     statuses: Optional[str] = Query(None, description="Filter by multiple validation statuses (comma-separated)"),
     result: Optional[str] = Query(None, description="Filter by validation result (PASS, FAIL)"),
     has_errors: Optional[bool] = Query(None, description="Filter by error presence"),
@@ -507,8 +507,8 @@ async def list_test_executions(
     
     Useful for finding:
     - Outstanding tasks: Use outstanding=true
-    - Pending executions: Use status=PENDING  
-    - Error executions: Use status=ERROR
+    - Pending executions: Use validation_status=PENDING  
+    - Error executions: Use validation_status=ERROR
     - Multiple statuses: Use statuses=PENDING,ERROR
     """
     # Verify test exists and user has access
@@ -548,15 +548,15 @@ async def list_test_executions(
                     )
         
         # Validate single status if provided
-        if status:
-            status_upper = status.upper()
+        if validation_status:
+            status_upper = validation_status.upper()
             valid_statuses = {"PENDING", "IN_PROGRESS", "VALIDATED", "ERROR"}
             if status_upper not in valid_statuses:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid status '{status}'. Valid statuses: {', '.join(valid_statuses)}"
+                    detail=f"Invalid validation_status '{validation_status}'. Valid statuses: {', '.join(valid_statuses)}"
                 )
-            status = status_upper
+            validation_status = status_upper
         
         # Validate result if provided
         if result:
@@ -574,7 +574,7 @@ async def list_test_executions(
             test_id=str(test_id),
             page=page,
             limit=limit,
-            status=status,
+            status=validation_status,
             statuses=statuses_list,
             result=result,
             has_errors=has_errors

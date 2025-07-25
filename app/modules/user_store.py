@@ -23,19 +23,23 @@ class UserStore:
 
     def get(self, group_id: str, user_id: str) -> Optional[User]:
         """Get a user by group ID and user ID."""
-        # For SQL stores, try direct user ID lookup first
-        try:
-            data = self._store.get(user_id)
-            if data:
-                user = User(**data)
-                # Verify the group matches if specified
-                if group_id and user.group != group_id:
-                    return None
-                return user
-        except Exception:
-            pass
+        # Check if this is an SQL store (has get_filtered method and is not a mock)
+        is_sql_store = hasattr(self._store, 'get_filtered') and hasattr(self._store, 'session')
         
-        # Fallback to Redis-style key lookup
+        if is_sql_store:
+            # For SQL stores, try direct user ID lookup first
+            try:
+                data = self._store.get(user_id)
+                if data:
+                    user = User(**data)
+                    # Verify the group matches if specified
+                    if group_id and user.group != group_id:
+                        return None
+                    return user
+            except Exception:
+                pass
+        
+        # For Redis stores or when SQL lookup fails, use Redis-style key lookup
         key = self._get_user_key(group_id, user_id)
         data = self._store.get(key)
         if not data:
@@ -52,17 +56,19 @@ class UserStore:
 
     def get_by_id_only(self, user_id: str) -> Optional[User]:
         """Get a user by ID only (searches across all groups)."""
-        # For SQL stores, we can directly query by user ID
-        # For Redis stores, we need to search through keys
-        try:
-            # Try direct access first (SQL store)
-            data = self._store.get(user_id)
-            if data:
-                return User(**data)
-        except Exception:
-            pass
+        # Check if this is an SQL store (has get_filtered method and is not a mock)
+        is_sql_store = hasattr(self._store, 'get_filtered') and hasattr(self._store, 'session')
         
-        # Fallback to Redis-style key search
+        if is_sql_store:
+            # For SQL stores, we can directly query by user ID
+            try:
+                data = self._store.get(user_id)
+                if data:
+                    return User(**data)
+            except Exception:
+                pass
+        
+        # For Redis stores or when SQL lookup fails, search through keys
         keys = self._store.keys()
         if not keys:
             return None
@@ -135,12 +141,14 @@ class UserStore:
         # Ensure the user has the group_id
         user_data.group = group_id
 
-        # For SQL stores, use user_id directly; for Redis stores, use the key format
-        try:
-            # Try SQL store approach first
+        # Check if this is an SQL store (has get_filtered method and is not a mock)
+        is_sql_store = hasattr(self._store, 'get_filtered') and hasattr(self._store, 'session')
+        
+        if is_sql_store:
+            # For SQL stores, use user_id directly
             self._store.put(str(user_data.id), user_data.model_dump())
-        except Exception:
-            # Fallback to Redis-style key
+        else:
+            # For Redis stores, use the key format
             key = self._get_user_key(group_id, str(user_data.id))
             self._store.put(key, user_data.model_dump())
         
@@ -157,12 +165,14 @@ class UserStore:
             if hasattr(existing_user, field):
                 setattr(existing_user, field, value)
 
-        # For SQL stores, use user_id directly; for Redis stores, use the key format
-        try:
-            # Try SQL store approach first
+        # Check if this is an SQL store (has get_filtered method and is not a mock)
+        is_sql_store = hasattr(self._store, 'get_filtered') and hasattr(self._store, 'session')
+        
+        if is_sql_store:
+            # For SQL stores, use user_id directly
             self._store.put(user_id, existing_user.model_dump())
-        except Exception:
-            # Fallback to Redis-style key
+        else:
+            # For Redis stores, use the key format
             key = self._get_user_key(group_id, user_id)
             self._store.put(key, existing_user.model_dump())
         
@@ -174,12 +184,14 @@ class UserStore:
         if not existing_user:
             return False
 
-        # For SQL stores, use user_id directly; for Redis stores, use the key format
-        try:
-            # Try SQL store approach first
+        # Check if this is an SQL store (has get_filtered method and is not a mock)
+        is_sql_store = hasattr(self._store, 'get_filtered') and hasattr(self._store, 'session')
+        
+        if is_sql_store:
+            # For SQL stores, use user_id directly
             self._store.pop(user_id)
-        except Exception:
-            # Fallback to Redis-style key
+        else:
+            # For Redis stores, use the key format
             key = self._get_user_key(group_id, user_id)
             self._store.pop(key)
         

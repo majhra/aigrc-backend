@@ -8,7 +8,7 @@ from typing import Optional
 import shortuuid
 from fastapi import HTTPException, status
 from jose import jwt
-from passlib.context import CryptContext
+import bcrypt
 from pydantic import AnyHttpUrl
 from jinja2 import Template
 from UnleashClient import UnleashClient
@@ -20,7 +20,16 @@ from app.modules.tlogger import TLogger
 from app.modules.user_store import UserStore
 from app.schemas import UserInDB
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing functions using bcrypt directly (no passlib dependency)
+def get_password_hash(password: str) -> str:
+    """Hash a password using bcrypt."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against its hash."""
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 project_name = settings.PROJECT_NAME
 project_name_formatted = project_name.strip().replace(" ", "_").upper()
@@ -138,8 +147,7 @@ def authenticate_user(username: str, password: str, user_store: UserStore):
     return user
 
 
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+# verify_password function now defined above with bcrypt
 
 
 def validate_password(password: str) -> str:
@@ -178,13 +186,7 @@ def format_email(email: str) -> str:
     return email.lower().strip()
 
 
-def get_password_hash(password: str) -> str:
-    """
-    Get the password hash.
-    :param password: The password to hash.
-    :return: The hashed password.
-    """
-    return pwd_context.hash(password)
+# get_password_hash function now defined above with bcrypt
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
