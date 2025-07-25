@@ -8,27 +8,24 @@ from fastapi import status
 from pydantic import UUID4
 
 from app.api import deps
-from app.api.utils import get_password_hash
+# Removed direct import to allow mocking to work properly
 from app.core.config import settings
 from app.schemas import User
 
+from app.api import utils
 from app.api.utils import (
     create_access_token,
-    get_password_hash,
     get_user_by_email,
 )
 
-# Mock password hashing for fast tests - use real bcrypt but cached for speed
-_password_cache = {}
-
+# Mock password hashing for fast tests - use real bcrypt with low cost for speed
 def mock_get_password_hash(password: str) -> str:
-    """Fast hash for testing using bcrypt but with caching"""
-    if password not in _password_cache:
-        import bcrypt
-        salt = bcrypt.gensalt()
-        hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-        _password_cache[password] = hashed.decode('utf-8')
-    return _password_cache[password]
+    """Fast hash for testing using bcrypt with low cost factor"""
+    import bcrypt
+    # Use cost factor 4 instead of default 12 for much faster hashing in tests
+    salt = bcrypt.gensalt(rounds=4)
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
 
 def mock_verify_password(plain_password: str, hashed_password: str) -> bool:
     """Fast verification for testing using real bcrypt"""
@@ -114,7 +111,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_signup_user_already_exists@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -211,7 +208,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -246,7 +243,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -614,7 +611,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "goricoaico+test_invite_user_success_inviter@gmail.com",
             "full_name": "John Inviter",
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -701,7 +698,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "goricoaico+test_invite_user_already_exists_inviter@gmail.com",
             "full_name": "John Inviter",
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -715,7 +712,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "goricoaico+test_invite_user_already_exists_existing@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -761,7 +758,7 @@ class TestUser:
             "id": (uuid.uuid4()),
             "email": "goricoaico+test_invite_user_no_group@gmail.com",
             "full_name": "No Group User",
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -826,7 +823,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "goricoaico+test_invite_user_email_failed_to_send_inviter@gmail.com",
             "full_name": "John Inviter",
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -948,7 +945,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_update_profile_success@gmail.com",
             "full_name": "Original Name",
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -1000,7 +997,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_update_profile_username@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -1045,7 +1042,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": original_email,
             "full_name": "Original Name",
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -1099,7 +1096,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_update_profile_current@gmail.com",
             "full_name": original_name,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -1147,7 +1144,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_update_profile_empty@gmail.com",
             "full_name": original_name,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -1210,7 +1207,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_update_profile_multiple@gmail.com",
             "full_name": "Original Name",
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -1280,7 +1277,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -1339,7 +1336,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -1374,7 +1371,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -1446,7 +1443,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -1492,7 +1489,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_password_reset_verify_code_expired@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -1539,7 +1536,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_get_user_by_id_success@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -1616,7 +1613,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_get_user_by_email_success@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -1677,7 +1674,7 @@ class TestUser:
             "id": str(uuid.uuid4()),
             "email": "gorocoaico+test_get_user_by_email_case_insensitive@gmail.com",
             "full_name": None,
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": None,
             "last_login": None,
@@ -1718,7 +1715,7 @@ class TestUser:
         user = {
             "id": str(uuid.uuid4()),
             "email": "goricoaico+test_get_user_by_id_authorization_self_access@gmail.com",
-            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "password": utils.get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
@@ -1747,7 +1744,7 @@ class TestUser:
         user1 = {
             "id": str(uuid.uuid4()),
             "email": "goricoaico+test_get_user_by_id_authorization_other_user_denied_user1@gmail.com",
-            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "password": utils.get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
@@ -1756,7 +1753,7 @@ class TestUser:
         user2 = {
             "id": str(uuid.uuid4()),
             "email": "goricoaico+test_get_user_by_id_authorization_other_user_denied_user2@gmail.com",
-            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "password": utils.get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
@@ -1786,7 +1783,7 @@ class TestUser:
         regular_user = {
             "id": str(uuid.uuid4()),
             "email": "goricoaico+test_get_user_by_id_authorization_admin_access_regular@gmail.com",
-            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "password": utils.get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
@@ -1796,7 +1793,7 @@ class TestUser:
         admin_user = {
             "id": str(uuid.uuid4()),
             "email": "goricoaico+test_get_user_by_id_authorization_admin_access_admin@gmail.com",
-            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "password": utils.get_password_hash(request.instance.valid_passwords[0]),
             "is_verified": True,
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
@@ -1833,7 +1830,7 @@ class TestUserAdmin:
         admin_user = User(
             id=uuid.uuid4(),
             email="goricoaico+admin@gmail.com",
-            password=get_password_hash("AdminPass123!"),
+            password=utils.get_password_hash("AdminPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -1848,7 +1845,7 @@ class TestUserAdmin:
             user = User(
                 id=uuid.uuid4(),
                 email=f"goricoaico+{i}@gmail.com",
-                password=get_password_hash(f"UserPass{i}123!"),
+                password=utils.get_password_hash(f"UserPass{i}123!"),
                 disabled=False,
                 created_at=datetime.now(timezone.utc),
                 is_verified=True,
@@ -1901,7 +1898,7 @@ class TestUserAdmin:
         admin_user = User(
             id=uuid.uuid4(),
             email="goricoaico+admin@gmail.com",
-            password=get_password_hash("AdminPass123!"),
+            password=utils.get_password_hash("AdminPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -1932,7 +1929,7 @@ class TestUserAdmin:
         admin_user = User(
             id=uuid.uuid4(),
             email="goricoaico+admin@gmail.com",
-            password=get_password_hash("AdminPass123!"),
+            password=utils.get_password_hash("AdminPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -1973,7 +1970,7 @@ class TestUserAdmin:
         admin_user = User(
             id=uuid.uuid4(),
             email="goricoaico+admin@gmail.com",
-            password=get_password_hash("AdminPass123!"),
+            password=utils.get_password_hash("AdminPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -1987,7 +1984,7 @@ class TestUserAdmin:
         test_user = User(
             id=uuid.uuid4(),
             email="goricoaico+existing@gmail.com",
-            password=get_password_hash("TestPass123!"),
+            password=utils.get_password_hash("TestPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -2013,7 +2010,7 @@ class TestUserAdmin:
         admin_user = User(
             id=uuid.uuid4(),
             email="goricoaico+admin@gmail.com",
-            password=get_password_hash("AdminPass123!"),
+            password=utils.get_password_hash("AdminPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -2071,7 +2068,7 @@ class TestUserAdmin:
             "id": str(user_id),
             "email": "gorocoaico+test_update_user_success@gmail.com",
             "full_name": "Original Name",
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -2087,7 +2084,7 @@ class TestUserAdmin:
             "id": str(uuid.uuid4()),
             "email": "goricoaico+test_update_user_success_admin@gmail.com",
             "full_name": "Admin User",
-            "password": get_password_hash(password_plain_text),
+            "password": utils.get_password_hash(password_plain_text),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -2136,7 +2133,7 @@ class TestUserAdmin:
             "id": str(uuid.uuid4()),
             "email": "goricoaico+test_update_user_not_found_admin@gmail.com",
             "full_name": "Admin User",
-            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "password": utils.get_password_hash(request.instance.valid_passwords[0]),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -2177,7 +2174,7 @@ class TestUserAdmin:
             "id": str(user_id),
             "email": "gorocoaico+test_update_user_unauthorized@gmail.com",
             "full_name": "Test User",
-            "password": get_password_hash(request.instance.valid_passwords[0]),
+            "password": utils.get_password_hash(request.instance.valid_passwords[0]),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -2211,7 +2208,7 @@ class TestUserAdmin:
             "id": str(user_id),
             "email": "gorocoaico+test_update_user_password@gmail.com",
             "full_name": "Test User",
-            "password": get_password_hash(old_password),
+            "password": utils.get_password_hash(old_password),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -2266,7 +2263,7 @@ class TestUserAdmin:
             "id": str(user_id),
             "email": "gorocoaico+test_update_user_self@gmail.com",
             "full_name": "Original Name",
-            "password": get_password_hash(password),
+            "password": utils.get_password_hash(password),
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "last_login": None,
@@ -2307,7 +2304,7 @@ class TestUserAdmin:
         regular_user = User(
             id=uuid.uuid4(),
             email="goricoaico+regular@gmail.com",
-            password=get_password_hash("UserPass123!"),
+            password=utils.get_password_hash("UserPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -2333,7 +2330,7 @@ class TestUserAdmin:
         regular_user = User(
             id=uuid.uuid4(),
             email="goricoaico+regular@gmail.com",
-            password=get_password_hash("UserPass123!"),
+            password=utils.get_password_hash("UserPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -2363,7 +2360,7 @@ class TestUserAdmin:
         user1 = User(
             id=uuid.uuid4(),
             email="goricoaico+user1@gmail.com",
-            password=get_password_hash("UserPass123!"),
+            password=utils.get_password_hash("UserPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -2372,7 +2369,7 @@ class TestUserAdmin:
         user2 = User(
             id=uuid.uuid4(),
             email="goricoaico+user2@gmail.com",
-            password=get_password_hash("UserPass123!"),
+            password=utils.get_password_hash("UserPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -2407,7 +2404,7 @@ class TestUserAdmin:
         admin_user = User(
             id=uuid.uuid4(),
             email="goricoaico+admin@gmail.com",
-            password=get_password_hash("AdminPass123!"),
+            password=utils.get_password_hash("AdminPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -2418,7 +2415,7 @@ class TestUserAdmin:
         user1 = User(
             id=uuid.uuid4(),
             email="goricoaico+user1@gmail.com",
-            password=get_password_hash("UserPass123!"),
+            password=utils.get_password_hash("UserPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
@@ -2428,7 +2425,7 @@ class TestUserAdmin:
         user2 = User(
             id=uuid.uuid4(),
             email="goricoaico+user2@gmail.com",
-            password=get_password_hash("UserPass123!"),
+            password=utils.get_password_hash("UserPass123!"),
             disabled=False,
             created_at=datetime.now(timezone.utc),
             is_verified=True,
