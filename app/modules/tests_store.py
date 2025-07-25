@@ -32,18 +32,51 @@ class AITestStore:
         search: Optional[str] = None,
         group_id: Optional[str] = None,
     ) -> tuple[List[AITestSchema], int]:
-        # Get all keys
-        keys = self._store.keys()
-
-        if not keys:
-            return [], 0
-
-        # Get all tests
+        # For SQL stores, use more efficient filtered queries when possible
         try:
-            tests = [self.get(key) for key in keys]
-            tests = [t for t in tests if t is not None]  # Filter out None values
-        except Exception as e:
-            return [], 0
+            if hasattr(self._store, 'get_filtered'):
+                # Build filters
+                filters = {}
+                if status:
+                    filters['status'] = status
+                if risk_level:
+                    filters['risk_level'] = risk_level
+                if group_id:
+                    filters['group_id'] = group_id
+                
+                # Get filtered results
+                test_data = self._store.get_filtered(filters) if filters else []
+                tests = []
+                for data in test_data:
+                    try:
+                        if 'group_id' not in data:
+                            data['group_id'] = None
+                        test = AITestSchema(**data)
+                        tests.append(test)
+                    except Exception:
+                        continue
+                
+                # For SQL stores without specific filters, fall back to getting all
+                if not filters:
+                    # Get all keys and process them
+                    keys = self._store.keys()
+                    if keys:
+                        tests = [self.get(key) for key in keys]
+                        tests = [t for t in tests if t is not None]
+            else:
+                raise Exception("Not an SQL store")
+        except Exception:
+            # Fallback to Redis-style approach
+            keys = self._store.keys()
+            if not keys:
+                return [], 0
+
+            # Get all tests
+            try:
+                tests = [self.get(key) for key in keys]
+                tests = [t for t in tests if t is not None]  # Filter out None values
+            except Exception as e:
+                return [], 0
 
         # Apply filters
         if status:

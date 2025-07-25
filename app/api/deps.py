@@ -7,10 +7,15 @@ from starlette.status import HTTP_403_FORBIDDEN
 
 from app.api.utils import get_logger, get_user_by_email
 from app.core.config import settings
+from app.core.database import get_db
 from app.modules.store_interface import RedisStore, StoreProtocol
+from app.modules.sql_store import SQLStore
+from app.models import User as UserModel, Group as GroupModel, AITest as AITestModel, TestExecution as TestExecutionModel, Prompt as PromptModel, PromptCategory as PromptCategoryModel, AIConfiguration as AIConfigModel
+from sqlalchemy.orm import Session
 from app.modules.tests_store import AITestStore
 from app.modules.tlogger import TLogger
-from app.schemas import TokenData, User
+from app.schemas import TokenData
+from app.schemas.user import User
 from app.modules.executions_store import ExecutedTestStore
 from app.modules.user_store import UserStore
 from app.modules.group_store import GroupStore
@@ -24,42 +29,48 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 
-def get_user_store(logger: TLogger = Depends(get_logger)) -> UserStore:
+def get_user_store(
+    logger: TLogger = Depends(get_logger),
+    db: Session = Depends(get_db)
+) -> UserStore:
     """
-    Get the user store with group-based structure.
+    Get the user store with PostgreSQL backend.
     """
-    redis_store = RedisStore(
-        logger, "user", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
-    )
-    return UserStore(redis_store)
+    sql_store = SQLStore(db, UserModel.__table__, logger)
+    return UserStore(sql_store)
 
 
-def get_group_store(logger: TLogger = Depends(get_logger)) -> GroupStore:
+def get_group_store(
+    logger: TLogger = Depends(get_logger),
+    db: Session = Depends(get_db)
+) -> GroupStore:
     """
-    Get the group store.
+    Get the group store with PostgreSQL backend.
     """
-    redis_store = RedisStore(
-        logger, "group", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
-    )
-    return GroupStore(redis_store)
+    sql_store = SQLStore(db, GroupModel.__table__, logger)
+    return GroupStore(sql_store)
 
 
-def get_test_store(logger: TLogger = Depends(get_logger)) -> AITestStore:
+def get_test_store(
+    logger: TLogger = Depends(get_logger),
+    db: Session = Depends(get_db)
+) -> AITestStore:
     """
-    Get the redis store for tests.
+    Get the PostgreSQL store for tests.
     """
-    return AITestStore(RedisStore(
-        logger, "tests", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
-    ))
+    sql_store = SQLStore(db, AITestModel.__table__, logger)
+    return AITestStore(sql_store)
 
 
-def get_execution_store(logger: TLogger = Depends(get_logger)) -> ExecutedTestStore:
+def get_execution_store(
+    logger: TLogger = Depends(get_logger),
+    db: Session = Depends(get_db)
+) -> ExecutedTestStore:
     """
-    Get test execution store instance.
+    Get test execution store instance with PostgreSQL backend.
     """
-    return ExecutedTestStore(RedisStore(
-        logger, "execution", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT
-    ))
+    sql_store = SQLStore(db, TestExecutionModel.__table__, logger)
+    return ExecutedTestStore(sql_store)
 
 
 def get_reports_store(
@@ -73,22 +84,35 @@ def get_reports_store(
     return ReportsStore(test_store, execution_store)
 
 # Dependency to get stores
-def get_category_store(logger: TLogger = Depends(get_logger)) -> PromptCategoryStore:
-    redis_store = RedisStore(logger, "prompt_category", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT)
-    return PromptCategoryStore(redis_store)
+def get_category_store(
+    logger: TLogger = Depends(get_logger),
+    db: Session = Depends(get_db)
+) -> PromptCategoryStore:
+    sql_store = SQLStore(db, PromptCategoryModel.__table__, logger)
+    return PromptCategoryStore(sql_store)
 
-def get_prompt_store(logger: TLogger = Depends(get_logger)) -> PromptStore:
-    redis_store = RedisStore(logger, "prompt", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT)
-    return PromptStore(redis_store)
+def get_prompt_store(
+    logger: TLogger = Depends(get_logger),
+    db: Session = Depends(get_db)
+) -> PromptStore:
+    sql_store = SQLStore(db, PromptModel.__table__, logger)
+    return PromptStore(sql_store)
 
-def get_prompt_set_store(logger: TLogger = Depends(get_logger)) -> PromptSetStore:
-    redis_store = RedisStore(logger, "prompt_set", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT)
-    return PromptSetStore(redis_store)
+def get_prompt_set_store(
+    logger: TLogger = Depends(get_logger),
+    db: Session = Depends(get_db)
+) -> PromptSetStore:
+    # Note: PromptSetStore might need a separate table - for now using Prompt table
+    sql_store = SQLStore(db, PromptModel.__table__, logger)
+    return PromptSetStore(sql_store)
 
 # Dependency to get configuration store
-def get_config_store(logger: TLogger = Depends(get_logger)) -> AIConfigurationStore:
-    redis_store = RedisStore(logger, "ai_config", host=settings.REDIS_ADDRESS, port=settings.REDIS_PORT)
-    return AIConfigurationStore(redis_store)
+def get_config_store(
+    logger: TLogger = Depends(get_logger),
+    db: Session = Depends(get_db)
+) -> AIConfigurationStore:
+    sql_store = SQLStore(db, AIConfigModel.__table__, logger)
+    return AIConfigurationStore(sql_store)
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],

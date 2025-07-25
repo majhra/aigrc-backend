@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REDIS_ADDRESS: str = "localhost"
     REDIS_PORT: int = 6379
+    
+    # Database configuration
+    DATABASE_URL: str = "postgresql://aigrc:aigrc_password@postgress-db-1:5432/aigrc"
+    DATABASE_POOL_SIZE: int = 10
+    DATABASE_MAX_OVERFLOW: int = 20
+    DATABASE_ECHO: bool = False
     SES_AWS_ACCESS_KEY_ID: str = ""
     SES_AWS_SECRET_ACCESS_KEY: str = ""
     SES_AWS_SENDER_EMAIL: EmailStr = ""

@@ -22,7 +22,19 @@ class ExecutedTestStore:
 
     def _update_indexes(self, execution_id: str, test_id: str, is_delete: bool = False) -> None:
         """Update both indexes when an execution is created or deleted."""
-        # hard force this to string, sometimes might be UUID
+        # For SQL stores, we don't need custom indexing - the database handles relationships
+        # For Redis stores, maintain the original indexing logic
+        
+        # Check if this is an SQL store by trying to use SQL-specific features
+        try:
+            # Try to check if the store has get_filtered method (SQL store specific)
+            if hasattr(self._store, 'get_filtered'):
+                # SQL store - no custom indexing needed, database handles relationships
+                return
+        except:
+            pass
+        
+        # Redis store - use original indexing logic
         execution_id = str(execution_id)
         test_id = str(test_id)
         if is_delete:
@@ -46,6 +58,16 @@ class ExecutedTestStore:
 
     def get_execution_ids_for_test(self, test_id: str) -> List[str]:
         """Get all execution IDs associated with a test ID."""
+        # For SQL stores, query executions by test_id directly
+        try:
+            if hasattr(self._store, 'get_filtered'):
+                # SQL store - use filter query
+                executions = self._store.get_filtered({'test_id': test_id})
+                return [exec_data.get('id') for exec_data in executions if exec_data.get('id')]
+        except:
+            pass
+        
+        # Redis store - use index
         data = self._store.get(self._get_test_to_executions_key(test_id))
         return data.get("executions", []) if data else []
 
