@@ -35,6 +35,8 @@ async def get_configurations(
     provider: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     my_configs: bool = Query(False, description="Show only configurations created by current user"),
+    sort_by: str = Query("created_at", description="Field to sort by"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort order"),
     config_store: AIConfigurationStore = Depends(deps.get_config_store),
     logger: TLogger = Depends(deps.get_logger),
 ):
@@ -51,7 +53,9 @@ async def get_configurations(
         status=status,
         provider=provider,
         search=search,
-        created_by=created_by
+        created_by=created_by,
+        sort_by=sort_by,
+        sort_order=sort_order
     )
     
     return AIEndpointConfigList(

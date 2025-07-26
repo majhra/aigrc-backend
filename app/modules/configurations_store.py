@@ -20,7 +20,26 @@ class AIConfigurationStore:
             return None
         
         try:
-            return AIEndpointConfig(**data)
+            # Remove encrypted fields that are not part of the AIEndpointConfig schema
+            cleaned_data = data.copy()
+            encrypted_fields = ['api_key_encrypted', 'bearer_token_encrypted', 'azure_client_secret_encrypted']
+            for field in encrypted_fields:
+                cleaned_data.pop(field, None)
+            
+            # Fix empty string values that should be None for proper Pydantic validation
+            nullable_fields = ['last_test_status', 'last_test_error', 'avg_response_time_ms', 'last_tested_at']
+            for field in nullable_fields:
+                if field in cleaned_data and cleaned_data[field] == '':
+                    cleaned_data[field] = None
+            
+            # Convert avg_response_time_ms to float if it's a valid number string
+            if 'avg_response_time_ms' in cleaned_data and cleaned_data['avg_response_time_ms'] is not None:
+                try:
+                    cleaned_data['avg_response_time_ms'] = float(cleaned_data['avg_response_time_ms'])
+                except (ValueError, TypeError):
+                    cleaned_data['avg_response_time_ms'] = None
+            
+            return AIEndpointConfig(**cleaned_data)
         except Exception as e:
             return None
 
@@ -32,6 +51,8 @@ class AIConfigurationStore:
         provider: Optional[str] = None,
         search: Optional[str] = None,
         created_by: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
     ) -> tuple[List[AIEndpointConfig], int]:
         keys = self._store.keys()
         if not keys:
@@ -60,8 +81,23 @@ class AIConfigurationStore:
                 or any(search_lower in tag.lower() for tag in c.tags)
             ]
 
-        # Sort by updated_at (most recent first)
-        configs.sort(key=lambda x: x.updated_at, reverse=True)
+        # Sort by the specified field and order
+        reverse_sort = sort_order.lower() == "desc"
+        
+        # Handle different sort fields
+        if sort_by == "created_at":
+            configs.sort(key=lambda x: x.created_at, reverse=reverse_sort)
+        elif sort_by == "updated_at":
+            configs.sort(key=lambda x: x.updated_at, reverse=reverse_sort)
+        elif sort_by == "name":
+            configs.sort(key=lambda x: x.name.lower(), reverse=reverse_sort)
+        elif sort_by == "provider":
+            configs.sort(key=lambda x: x.provider, reverse=reverse_sort)
+        elif sort_by == "status":
+            configs.sort(key=lambda x: x.status, reverse=reverse_sort)
+        else:
+            # Default to created_at if sort_by is not recognized
+            configs.sort(key=lambda x: x.created_at, reverse=reverse_sort)
 
         # Calculate pagination
         total = len(configs)
@@ -109,13 +145,16 @@ class AIConfigurationStore:
             **config_data
         )
         
-        # Store the configuration
-        self._store.put(config_id, new_config.model_dump())
+        # Add sensitive data to the configuration for SQL storage
+        config_dict = new_config.model_dump()
+        config_dict.update({
+            "api_key_encrypted": sensitive_data.get("api_key"),
+            "bearer_token_encrypted": sensitive_data.get("bearer_token"),
+            "azure_client_secret_encrypted": sensitive_data.get("azure_client_secret"),
+        })
         
-        # Store sensitive data with special key (in production, use proper encryption)
-        if any(sensitive_data.values()):
-            sensitive_key = f"{config_id}_sensitive"
-            self._store.put(sensitive_key, sensitive_data)
+        # Store the configuration
+        self._store.put(config_id, config_dict)
         
         return new_config
 
@@ -162,15 +201,14 @@ class AIConfigurationStore:
         
         existing_config.updated_at = now
         
-        # Store updated configuration
-        self._store.put(config_id, existing_config.model_dump())
-        
         # Update sensitive data if provided
         if sensitive_updates:
-            sensitive_key = f"{config_id}_sensitive"
-            existing_sensitive = self._store.get(sensitive_key) or {}
-            existing_sensitive.update(sensitive_updates)
-            self._store.put(sensitive_key, existing_sensitive)
+            for field, value in sensitive_updates.items():
+                encrypted_field = f"{field}_encrypted"
+                setattr(existing_config, encrypted_field, value)
+        
+        # Store updated configuration
+        self._store.put(config_id, existing_config.model_dump())
         
         return existing_config
 
@@ -182,16 +220,19 @@ class AIConfigurationStore:
         # Delete main config
         self._store.pop(config_id)
         
-        # Delete sensitive data
-        sensitive_key = f"{config_id}_sensitive"
-        self._store.pop(sensitive_key)
-        
         return True
 
     def get_sensitive_data(self, config_id: str) -> Dict[str, str]:
         """Get sensitive authentication data for a configuration"""
-        sensitive_key = f"{config_id}_sensitive"
-        return self._store.get(sensitive_key) or {}
+        config_data = self._store.get(config_id)
+        if not config_data:
+            return {}
+        
+        return {
+            "api_key": config_data.get("api_key_encrypted"),
+            "bearer_token": config_data.get("bearer_token_encrypted"),
+            "azure_client_secret": config_data.get("azure_client_secret_encrypted"),
+        }
 
     def update_test_result(self, config_id: str, test_response: ConfigTestResponse) -> Optional[AIEndpointConfig]:
         """Update configuration with test results"""
