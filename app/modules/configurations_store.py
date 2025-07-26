@@ -75,21 +75,37 @@ class AIConfigurationStore:
         now = datetime.now(timezone.utc)
         config_id = str(uuid4())
         
-        # Prepare config data, excluding sensitive fields from storage
+        # Prepare config data
         config_data = config.model_dump()
         
-        # Store sensitive data separately (in production, encrypt these)
+        # Extract sensitive data for encrypted storage
         sensitive_data = {
             "api_key": config_data.pop("api_key", None),
             "bearer_token": config_data.pop("bearer_token", None),
             "azure_client_secret": config_data.pop("azure_client_secret", None),
         }
         
+        # Extract fields that go into connection_config JSON
+        connection_config_fields = [
+            "azure_deployment_name", "azure_tenant_id", "azure_client_id", 
+            "azure_api_version", "timeout_seconds", "max_retries", 
+            "rate_limit_rpm", "huggingface_task"
+        ]
+        
+        connection_config = {}
+        for field in connection_config_fields:
+            if field in config_data:
+                value = config_data.pop(field)
+                if value is not None:  # Only store non-null values
+                    connection_config[field] = value
+        
+        # Create the configuration object
         new_config = AIEndpointConfig(
             id=config_id,
             created_by=user.id,
             created_at=now,
             updated_at=now,
+            connection_config=connection_config,
             **config_data
         )
         
@@ -120,7 +136,27 @@ class AIConfigurationStore:
             if field in update_data:
                 sensitive_updates[field] = update_data.pop(field)
         
-        # Update configuration fields
+        # Handle connection_config fields
+        connection_config_fields = [
+            "azure_deployment_name", "azure_tenant_id", "azure_client_id", 
+            "azure_api_version", "timeout_seconds", "max_retries", 
+            "rate_limit_rpm", "huggingface_task"
+        ]
+        
+        connection_config_updates = {}
+        for field in connection_config_fields:
+            if field in update_data:
+                value = update_data.pop(field)
+                if value is not None:
+                    connection_config_updates[field] = value
+        
+        # Update connection_config if there are updates
+        if connection_config_updates:
+            current_connection_config = existing_config.connection_config or {}
+            current_connection_config.update(connection_config_updates)
+            existing_config.connection_config = current_connection_config
+        
+        # Update remaining configuration fields
         for field, value in update_data.items():
             setattr(existing_config, field, value)
         

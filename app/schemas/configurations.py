@@ -90,22 +90,50 @@ class AIEndpointConfig(AIEndpointConfigBase):
     last_test_status: Literal["success", "failed", "pending"] | None = None
     last_test_error: str | None = None
     
-    # Provider-specific configuration (non-sensitive)
-    azure_api_version: str | None = None
-    azure_deployment_name: str | None = None
-    huggingface_task: str | None = None
-    custom_headers: Dict[str, str] = Field(default_factory=dict)
+    # Connection configuration (stored as JSON in DB)
+    connection_config: Dict[str, Any] = Field(default_factory=dict)
     
-    # Request configuration
-    timeout_seconds: int = 30
-    max_retries: int = 3
-    rate_limit_rpm: int | None = None
+    # Non-sensitive headers
+    custom_headers: Dict[str, str] = Field(default_factory=dict)
     
     # Usage statistics
     total_requests: int = 0
     successful_requests: int = 0
     failed_requests: int = 0
     avg_response_time_ms: float | None = None
+    
+    # Computed properties for backward compatibility
+    @property
+    def azure_api_version(self) -> str | None:
+        return self.connection_config.get("azure_api_version")
+    
+    @property
+    def azure_deployment_name(self) -> str | None:
+        return self.connection_config.get("azure_deployment_name")
+    
+    @property
+    def azure_tenant_id(self) -> str | None:
+        return self.connection_config.get("azure_tenant_id")
+    
+    @property
+    def azure_client_id(self) -> str | None:
+        return self.connection_config.get("azure_client_id")
+    
+    @property
+    def huggingface_task(self) -> str | None:
+        return self.connection_config.get("huggingface_task")
+    
+    @property
+    def timeout_seconds(self) -> int:
+        return self.connection_config.get("timeout_seconds", 30)
+    
+    @property
+    def max_retries(self) -> int:
+        return self.connection_config.get("max_retries", 3)
+    
+    @property
+    def rate_limit_rpm(self) -> int | None:
+        return self.connection_config.get("rate_limit_rpm")
     
     # NOTE: Sensitive auth data is NOT included in the response model
 

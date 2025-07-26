@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, JSON, Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -24,13 +24,23 @@ class AIConfiguration(Base):
     last_tested_at = Column(DateTime(timezone=True))
     last_test_status = Column(String(20))  # success, failed, pending
     last_test_error = Column(Text)
+    
+    # Usage statistics
     total_requests = Column(Integer, default=0)
     successful_requests = Column(Integer, default=0)
+    failed_requests = Column(Integer, default=0)
+    avg_response_time_ms = Column(Float)
+    
+    # Provider-specific configuration (JSON field for flexibility)
+    connection_config = Column(JSON, default=dict)  # azure_deployment_name, timeout_seconds, max_retries, rate_limit_rpm, huggingface_task, etc.
     
     # Sensitive data stored separately (encrypted)
     api_key_encrypted = Column(Text)
-    azure_api_version = Column(String(50))
-    custom_headers = Column(JSON)
+    bearer_token_encrypted = Column(Text)
+    azure_client_secret_encrypted = Column(Text)
+    
+    # Non-sensitive but commonly used headers
+    custom_headers = Column(JSON, default=dict)
 
     # Relationships
     creator = relationship("User", back_populates="created_configurations")
