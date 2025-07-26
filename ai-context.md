@@ -4,7 +4,9 @@
 
 We are building an AI Validation & Audit Tool focused on providing governance, risk, and compliance (GRC) reporting to CEO and board level members. The system allows IT teams to document, validate, and report on AI interactions with expert human oversight for quality control and compliance verification.
 
-This document provides complete context for the frontend development of this MVP application.
+This document provides complete context for the backend development of this MVP application.
+
+**Current Database Architecture**: PostgreSQL with SQLAlchemy ORM (migrated from Redis for better relational data support and performance under load)
 
 ## Current Implementation Status
 
@@ -43,12 +45,20 @@ This document provides complete context for the frontend development of this MVP
 - `POST /api/v1.0/ai-connection/test` - Test AI connection
 - Basic AI connection service with OpenAI integration
 
+#### AI Simulation Endpoints (NEW)
+- `POST /api/v1.0/simulation/v1/chat/completions` - OpenAI-compatible chat completions simulation
+- `GET /api/v1.0/simulation/v1/models` - List available models for simulation
+- Provides testing environment for AI interactions without external API calls
+
 ### ✅ IMPLEMENTED - Storage & Infrastructure
-- Redis for persistent storage
-- UUID-based user identification
-- Email-based user lookup
-- Support for pagination in user listing
-- Store interfaces for users, groups, executions, tests, reports
+- **PostgreSQL** for persistent storage with SQLAlchemy ORM
+- **Redis** legacy support maintained through StoreProtocol abstraction
+- UUID-based user identification with efficient indexing
+- Email-based user lookup with optimized queries
+- Support for pagination, filtering, and complex queries
+- Store interfaces for users, groups, executions, tests, reports, configurations
+- Database migrations with Alembic
+- Multi-tenant architecture with group-based data segregation
 
 ### ✅ IMPLEMENTED - Security Features
 - JWT token-based authentication
@@ -115,7 +125,7 @@ This document provides complete context for the frontend development of this MVP
 +-------------------+             +-------------------+
 |                   |             |                   |
 |  AI Connector     |             |  Database Layer   |
-|  (Client-side)    |             |  (Redis)          |
+|  (Client-side)    |             |  (PostgreSQL)     |
 |                   |             |                   |
 +--------+----------+             +-------------------+
          |
@@ -186,21 +196,37 @@ src/
 
 ```
 app/
-├── api/              # FastAPI application structure
-    ├── api_v1/             # Core business logic
-        ├── endpoints/          # Endpoint definitions
-    ├── schemas/            # Pydantic models
-    ├── services/           # Service definitions
-    ├── tests/              # Test files
-    ├── utils/              # Utility functions
-    ├── db/                 # Database models and operations
-    ├── assets/             # additional assets
-    ├── core/               # Core config
-    ├── modules/            # Module definitions
-    ├── schemas/            # Pydantic models
-    ├── main.py             # FastAPI application entry point
-├── requirements/         # Requirements for prod and dev
-├── tests/            # Test files
+├── api/                    # FastAPI application structure
+│   ├── api_v1/            # API version 1
+│   │   ├── endpoints/     # Endpoint definitions
+│   │   │   ├── user.py           # User management & auth
+│   │   │   ├── prompts.py        # Prompt library
+│   │   │   ├── configurations.py # AI endpoint configs
+│   │   │   ├── tests.py          # Test management
+│   │   │   ├── reports.py        # Analytics & reports
+│   │   │   ├── simulation.py     # OpenAI simulation
+│   │   │   └── feature_flags.py  # Feature flags
+│   │   └── api.py         # API router configuration
+│   ├── deps.py            # FastAPI dependencies
+│   └── utils.py           # API utilities
+├── core/                  # Core configuration
+│   └── config.py          # Settings and environment config
+├── modules/               # Business logic modules
+│   ├── store_interface.py      # StoreProtocol base interface
+│   ├── sql_store.py            # PostgreSQL implementation
+│   ├── user_store.py           # User data operations
+│   ├── prompts_store.py        # Prompt management
+│   ├── configurations_store.py # AI config management
+│   ├── tests_store.py          # Test management
+│   ├── email_service.py        # Email integration
+│   └── tlogger.py              # Logging utilities
+├── schemas/               # Pydantic models for data validation
+├── assets/                # Static assets (email templates, etc.)
+├── alembic/               # Database migration files
+├── main.py                # FastAPI application entry point
+├── requirements/          # Dependencies (base.txt, dev.txt)
+├── tests/                 # Test suite
+└── alembic.ini           # Alembic configuration
 ```
 
 ### Core Features & Screens
@@ -309,7 +335,14 @@ app/
    - `PUT /api/v1.0/prompts/sets/{id}` - Update prompt set
    - `DELETE /api/v1.0/prompts/sets/{id}` - Delete prompt set
 
-6. **Configurations:** (api/api_v1/endpoints/configurations.py) - ✅ COMPLETE
+6. **AI Simulation:** (api/api_v1/endpoints/simulation.py) - ✅ NEW
+   - `POST /api/v1.0/simulation/v1/chat/completions` - OpenAI-compatible chat completions simulation
+   - `GET /api/v1.0/simulation/v1/models` - List available models for simulation
+   - Provides testing environment with API key '12345' for development and testing
+   - Supports any model name with simulated token usage and costs
+   - Returns OpenAI-compatible response format for seamless integration
+
+7. **Configurations:** (api/api_v1/endpoints/configurations.py) - ✅ COMPLETE
    - `GET /api/v1.0/configurations/` - List AI endpoint configurations
    - `GET /api/v1.0/configurations/{id}` - Get configuration details
    - `POST /api/v1.0/configurations/` - Create AI endpoint configuration
@@ -320,7 +353,7 @@ app/
    - `GET /api/v1.0/configurations/templates/list` - List configuration templates
    - `POST /api/v1.0/configurations/validate` - Validate configuration
 
-5. **Tests:**  (api/api_v1/endpoints/tests.py) -
+8. **Tests:**  (api/api_v1/endpoints/tests.py) - ✅ COMPLETE
    - `GET /api/v1.0/tests` - List all tests (paginated)
      - Query Parameters:
        - `page`: Page number (default: 1)
@@ -897,21 +930,26 @@ For the MVP, focus on implementing:
 - Authentication system fully implemented
 - User management system complete
 - AI connection service operational
-- Storage infrastructure (Redis) established
+- **Storage infrastructure (PostgreSQL)** established with Alembic migrations
 - Email integration working
 - **Prompts management system complete** (NEW)
 - **AI endpoint configuration management complete** (NEW)
 - **Multi-provider AI support** (NEW)
 - **Configuration validation and testing** (NEW)
+- **OpenAI simulation endpoint** (NEW)
+- **Test management system complete** (UPDATED)
+- **Reports & analytics system** (UPDATED)
 
 ### 🔄 Next Development Priorities
 
 #### Remaining Backend (Optional Enhancements)
-1. Complete test management system (CRUD operations) - **Partially implemented**
-2. Implement test execution workflow
-3. Build comprehensive reports system - **Foundation complete**
+1. ~~Complete test management system (CRUD operations)~~ ✅ **COMPLETED**
+2. ~~Implement test execution workflow~~ ✅ **COMPLETED**
+3. ~~Build comprehensive reports system~~ ✅ **COMPLETED**
 4. ~~Develop prompts management~~ ✅ **COMPLETED**
-5. Create test validation framework
+5. Advanced test validation workflows (human + AI validation)
+6. Test collection scheduling and automation
+7. Advanced compliance framework mapping
 
 #### Frontend Development  
 1. Core layout and navigation structure
