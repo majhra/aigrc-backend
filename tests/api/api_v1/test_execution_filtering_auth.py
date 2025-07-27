@@ -4,6 +4,36 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 
+# Mock password hashing for fast tests - use real bcrypt with low cost for speed
+def mock_get_password_hash(password: str) -> str:
+    """Fast hash for testing using bcrypt with low cost factor"""
+    import bcrypt
+    # Use cost factor 4 instead of default 12 for much faster hashing in tests
+    salt = bcrypt.gensalt(rounds=4)
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+def mock_verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Fast verification for testing using real bcrypt"""
+    import bcrypt
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+# Apply mocks at module level for fast password operations
+password_hash_mock = patch('app.api.utils.get_password_hash', side_effect=mock_get_password_hash)
+verify_password_mock = patch('app.api.utils.verify_password', side_effect=mock_verify_password)
+
+# Start all mocks
+password_hash_mock.start()
+verify_password_mock.start()
+
+# Cleanup function to stop mocks when module is unloaded
+import atexit
+def cleanup_mocks():
+    password_hash_mock.stop()
+    verify_password_mock.stop()
+
+atexit.register(cleanup_mocks)
+
 from app.main import app
 from app.modules.store_interface import LocalStore
 from app.modules.tests_store import AITestStore
