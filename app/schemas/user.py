@@ -6,7 +6,7 @@ from fastapi import Form
 from pydantic import BaseModel, EmailStr, field_validator, UUID4
 from pydantic.dataclasses import dataclass
 
-from app.api import utils
+from app.core import validators
 
 
 class Token(BaseModel):
@@ -71,7 +71,7 @@ class UserResponse(BaseModel):
 
     @field_validator("email", mode="before")
     def lowercase_and_strip_email(cls, email, **kwargs):
-        return utils.format_email(email)
+        return validators.format_email(email)
 
 
 class RegistrationUserRepsonse(BaseModel):
@@ -109,13 +109,20 @@ class User(BaseModel):
     def lowercase_and_strip_email(cls, email, **kwargs):
         if email is None:
             return None
-        return utils.format_email(email)
+        return validators.format_email(email)
 
     @field_validator("group", mode="before")
     def ensure_group_is_string(cls, group, **kwargs):
         if group is None:
             return None
         return str(group)
+    
+    @field_validator("last_login", "created_at", "verification_code_expires_at", "password_reset_code_expires_at", mode="before")
+    def handle_empty_datetime(cls, v):
+        """Handle empty string datetime fields from database"""
+        if v == "" or v is None:
+            return None
+        return v
 
 
 class UserInDB(User):
@@ -135,11 +142,12 @@ class UserUpdate(BaseModel):
     full_name: str | None = None
     #group_id: UUID4 | None = None
     password: str | None = None
+    role: str | None = None
 
     @field_validator("password")
     def validate_password(cls, password, **kwargs):
         if password is not None:
-            return utils.validate_password(password)
+            return validators.validate_password(password)
         return password
 
 
@@ -154,11 +162,11 @@ class UserSignup:
 
     @field_validator("email", mode="before")
     def lowercase_and_strip_email(cls, email, **kwargs):
-        return utils.format_email(email)
+        return validators.format_email(email)
 
     @field_validator("password")
     def validate_password(cls, password, **kwargs):
-        return utils.validate_password(password)
+        return validators.validate_password(password)
 
 
 @dataclass
@@ -168,7 +176,7 @@ class UserEmailVerification:
 
     @field_validator("email", mode="before")
     def lowercase_and_strip_email(cls, email, **kwargs):
-        return utils.format_email(email)
+        return validators.format_email(email)
 
     @field_validator("verification_code", mode="before")
     def validate_password_reset_code(cls, password_reset_code, **kwargs):
@@ -183,11 +191,11 @@ class UserPasswordResetVerify:
 
     @field_validator("email", mode="before")
     def lowercase_and_strip_email(cls, email, **kwargs):
-        return utils.format_email(email)
+        return validators.format_email(email)
 
     @field_validator("new_password")
     def validate_password(cls, password, **kwargs):
-        return utils.validate_password(password)
+        return validators.validate_password(password)
 
     @field_validator("password_reset_code", mode="before")
     def validate_password_reset_code(cls, password_reset_code, **kwargs):
@@ -200,4 +208,4 @@ class UserInvite:
 
     @field_validator("email", mode="before")
     def lowercase_and_strip_email(cls, email, **kwargs):
-        return utils.format_email(email)
+        return validators.format_email(email)

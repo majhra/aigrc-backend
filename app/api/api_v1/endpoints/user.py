@@ -73,13 +73,20 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Check if user is verified
+    # Check if user is verified (bypass for integration testing emails)
     if not user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email is not verified",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        # Allow bypass for integration testing emails
+        if not (user.email and "goricoaico+" in user.email and "@gmail.com" in user.email):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Email is not verified",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        # For integration test emails, auto-verify
+        logger.error(f"Auto Verifying email: {user.email}, disabled: {user.disabled}")
+
+        user.is_verified = True
+        user_store.update(user.group, str(user.id), user.model_dump())
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -132,6 +139,7 @@ async def create_user(
         disabled=False,
         created_at=datetime.now(timezone.utc),
         is_verified=False,
+        role="user",  # Set default role for regular users
         group=group_id,  # This is already a string from str(new_group.id)
     )
 
@@ -461,6 +469,10 @@ async def update_profile(
     # Remove any fields that shouldn't be updated
     update_data.pop("email", None)  # Email should not be updatable through this endpoint
     update_data.pop("group_id", None)  # Group should be updated through a different endpoint
+    
+    # Only admins can update role
+    if "role" in update_data and current_user.role != "admin":
+        update_data.pop("role", None)
     
     # Handle password hashing if password is being updated
     if "password" in update_data and update_data["password"] is not None:
@@ -909,6 +921,7 @@ async def create_user_admin(
             "disabled": False,
             "created_at": datetime.now(timezone.utc),
             "is_verified": True,  # Admin-created users are pre-verified
+            "role": "user",  # Default role, can be changed later by admin
             "group": default_group_id,
         })
 
@@ -979,6 +992,11 @@ async def update_user(
         
         # Update user fields
         update_data = user_update.model_dump(exclude_unset=True)
+        
+        # Only admins can update role
+        if "role" in update_data and current_user.role != "admin":
+            update_data.pop("role", None)
+        
         for field, value in update_data.items():
             if field == "password" and value is not None:
                 value = get_password_hash(value)

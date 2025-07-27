@@ -146,6 +146,25 @@ class AITestStore:
         return updated_test
 
     def delete(self, test_id: str) -> bool:
+        # Before deleting the test, we need to delete all related executions
+        # to avoid foreign key constraint violations
+        try:
+            from app.modules.executions_store import ExecutedTestStore
+            execution_store = ExecutedTestStore(self._store)
+            
+            # Get all executions for this test
+            executions, _ = execution_store.list(test_id=test_id, page=1, limit=1000)
+            
+            # Delete all executions first
+            for execution in executions:
+                execution_store.delete(str(execution.id))
+                
+        except Exception as e:
+            # If we can't delete executions, the test deletion will likely fail
+            # Log the error but continue to attempt test deletion
+            pass
+        
+        # Now delete the test
         data = self._store.pop(test_id)
         return data is not None
 

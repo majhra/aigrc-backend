@@ -10,6 +10,13 @@ class PromptCategoryBase(BaseModel):
     category_type: Literal["COMPLIANCE", "SAFETY", "ACCURACY", "CUSTOM"] = "CUSTOM"
     priority: Literal["HIGH", "MEDIUM", "LOW"] = "MEDIUM"
     tags: List[str] = Field(default_factory=list)
+    
+    @field_validator('name', 'description')
+    @classmethod
+    def validate_non_empty_strings(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Field cannot be empty or contain only whitespace")
+        return v.strip()
 
 class PromptCategoryCreate(PromptCategoryBase):
     pass
