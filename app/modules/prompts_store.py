@@ -34,21 +34,57 @@ class PromptCategoryStore:
         category_type: Optional[str] = None,
         search: Optional[str] = None,
     ) -> tuple[List[PromptCategory], int]:
-        keys = self._store.keys()
-        if not keys:
-            return [], 0
-
+        sql_filtered = False  # Track if SQL filtering was used
+        
+        # For SQL stores, use more efficient filtered queries when possible
         try:
-            categories = [self.get(key) for key in keys]
-            categories = [c for c in categories if c is not None]
-        except Exception as e:
-            return [], 0
+            if hasattr(self._store, 'get_filtered'):
+                # Build filters for SQL query
+                filters = {}
+                if status:
+                    filters['status'] = status
+                if category_type:
+                    filters['category_type'] = category_type
+                
+                # Get filtered results from SQL
+                if filters:
+                    sql_filtered = True
+                    category_data = self._store.get_filtered(filters)
+                    categories = []
+                    for data in category_data:
+                        try:
+                            category = PromptCategory(**data)
+                            categories.append(category)
+                        except Exception:
+                            continue
+                else:
+                    # No filters were applied, fall back to keys() approach for SQL stores
+                    keys = self._store.keys()
+                    if keys:
+                        categories = [self.get(key) for key in keys]
+                        categories = [c for c in categories if c is not None]
+                    else:
+                        categories = []
+            else:
+                raise Exception("Not an SQL store")
+        except Exception:
+            # Fallback to Redis-style approach
+            keys = self._store.keys()
+            if not keys:
+                return [], 0
 
-        # Apply filters
-        if status:
-            categories = [c for c in categories if c.status == status]
-        if category_type:
-            categories = [c for c in categories if c.category_type == category_type]
+            try:
+                categories = [self.get(key) for key in keys]
+                categories = [c for c in categories if c is not None]
+            except Exception as e:
+                return [], 0
+
+        # Apply filters only if SQL filtering wasn't used
+        if not sql_filtered:
+            if status:
+                categories = [c for c in categories if c.status == status]
+            if category_type:
+                categories = [c for c in categories if c.category_type == category_type]
         if search:
             search_lower = search.lower()
             categories = [
@@ -139,21 +175,61 @@ class PromptStore:
         tags: Optional[List[str]] = None,
         category_store=None,
     ) -> tuple[List[Prompt], int]:
-        keys = self._store.keys()
-        if not keys:
-            return [], 0
-
+        sql_filtered = False  # Track if SQL filtering was used
+        
+        # For SQL stores, use more efficient filtered queries when possible
         try:
-            prompts = [self.get(key) for key in keys]
-            prompts = [p for p in prompts if p is not None]
-        except Exception as e:
-            return [], 0
+            if hasattr(self._store, 'get_filtered'):
+                # Build filters for SQL query
+                filters = {}
+                if status:
+                    filters['status'] = status
+                if category_id:
+                    filters['category_id'] = category_id
+                if risk_level:
+                    filters['risk_level'] = risk_level
+                
+                # Get filtered results from SQL
+                if filters:
+                    sql_filtered = True
+                    prompt_data = self._store.get_filtered(filters)
+                    prompts = []
+                    for data in prompt_data:
+                        try:
+                            prompt = Prompt(**data)
+                            prompts.append(prompt)
+                        except Exception:
+                            continue
+                else:
+                    # No filters were applied, fall back to keys() approach for SQL stores
+                    keys = self._store.keys()
+                    if keys:
+                        prompts = [self.get(key) for key in keys]
+                        prompts = [p for p in prompts if p is not None]
+                    else:
+                        prompts = []
+            else:
+                raise Exception("Not an SQL store")
+        except Exception:
+            # Fallback to Redis-style approach
+            keys = self._store.keys()
+            if not keys:
+                return [], 0
 
-        # Apply filters
-        if status:
-            prompts = [p for p in prompts if p.status == status]
-        if category_id:
-            prompts = [p for p in prompts if str(p.category_id) == str(category_id)]
+            try:
+                prompts = [self.get(key) for key in keys]
+                prompts = [p for p in prompts if p is not None]
+            except Exception as e:
+                return [], 0
+
+        # Apply filters only if SQL filtering wasn't used
+        if not sql_filtered:
+            if status:
+                prompts = [p for p in prompts if p.status == status]
+            if category_id:
+                prompts = [p for p in prompts if str(p.category_id) == str(category_id)]
+            if risk_level:
+                prompts = [p for p in prompts if p.risk_level == risk_level]
         if category_type and category_store:
             # Get all categories with the specified type
             matching_categories, _ = category_store.list()
@@ -270,21 +346,57 @@ class PromptSetStore:
         category_id: Optional[str] = None,
         search: Optional[str] = None,
     ) -> tuple[List[PromptSet], int]:
-        keys = self._store.keys()
-        if not keys:
-            return [], 0
-
+        sql_filtered = False  # Track if SQL filtering was used
+        
+        # For SQL stores, use more efficient filtered queries when possible
         try:
-            sets = [self.get(key) for key in keys]
-            sets = [s for s in sets if s is not None]
-        except Exception as e:
-            return [], 0
+            if hasattr(self._store, 'get_filtered'):
+                # Build filters for SQL query
+                filters = {}
+                if status:
+                    filters['status'] = status
+                if category_id:
+                    filters['category_id'] = category_id
+                
+                # Get filtered results from SQL
+                if filters:
+                    sql_filtered = True
+                    set_data = self._store.get_filtered(filters)
+                    sets = []
+                    for data in set_data:
+                        try:
+                            prompt_set = PromptSet(**data)
+                            sets.append(prompt_set)
+                        except Exception:
+                            continue
+                else:
+                    # No filters were applied, fall back to keys() approach for SQL stores
+                    keys = self._store.keys()
+                    if keys:
+                        sets = [self.get(key) for key in keys]
+                        sets = [s for s in sets if s is not None]
+                    else:
+                        sets = []
+            else:
+                raise Exception("Not an SQL store")
+        except Exception:
+            # Fallback to Redis-style approach
+            keys = self._store.keys()
+            if not keys:
+                return [], 0
 
-        # Apply filters
-        if status:
-            sets = [s for s in sets if s.status == status]
-        if category_id:
-            sets = [s for s in sets if str(s.category_id) == str(category_id)]
+            try:
+                sets = [self.get(key) for key in keys]
+                sets = [s for s in sets if s is not None]
+            except Exception as e:
+                return [], 0
+
+        # Apply filters only if SQL filtering wasn't used
+        if not sql_filtered:
+            if status:
+                sets = [s for s in sets if s.status == status]
+            if category_id:
+                sets = [s for s in sets if str(s.category_id) == str(category_id)]
         if search:
             search_lower = search.lower()
             sets = [

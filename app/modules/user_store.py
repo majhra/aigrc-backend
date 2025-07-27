@@ -91,30 +91,70 @@ class UserStore:
         search: Optional[str] = None,
     ) -> tuple[List[User], int]:
         """List users with pagination and filtering."""
-        keys = self._store.keys()
-
-        if not keys:
-            return [], 0
-
-        # Filter keys by group if specified
-        if group_id:
-            keys = [key for key in keys if key.startswith(f"{group_id}:")]
-
-        # Get all users
+        sql_filtered = False  # Track if SQL filtering was used
+        
+        # For SQL stores, use more efficient filtered queries when possible
         try:
-            users = []
-            for key in keys:
-                try:
-                    group_id, user_id = self._parse_user_key(key)
-                    user = self.get(group_id, user_id)
-                    if user:
-                        users.append(user)
-                except ValueError:
-                    # Skip keys that don't match the expected format
-                    continue
-        except Exception as e:
-            print(f"error: {e}")
-            return [], 0
+            if hasattr(self._store, 'get_filtered'):
+                # Build filters for SQL query
+                filters = {}
+                if group_id:
+                    filters['group_id'] = group_id
+                
+                # Get filtered results from SQL
+                if filters:
+                    sql_filtered = True
+                    user_data = self._store.get_filtered(filters)
+                    users = []
+                    for data in user_data:
+                        try:
+                            user = User(**data)
+                            users.append(user)
+                        except Exception:
+                            continue
+                else:
+                    # No filters were applied, fall back to keys() approach for SQL stores
+                    keys = self._store.keys()
+                    if keys:
+                        users = []
+                        for key in keys:
+                            try:
+                                parsed_group_id, user_id = self._parse_user_key(key)
+                                user = self.get(parsed_group_id, user_id)
+                                if user:
+                                    users.append(user)
+                            except ValueError:
+                                continue
+                    else:
+                        users = []
+            else:
+                raise Exception("Not an SQL store")
+        except Exception:
+            # Fallback to Redis-style approach
+            keys = self._store.keys()
+
+            if not keys:
+                return [], 0
+
+            # Filter keys by group if specified - only for Redis-style approach
+            if group_id:
+                keys = [key for key in keys if key.startswith(f"{group_id}:")]
+
+            # Get all users
+            try:
+                users = []
+                for key in keys:
+                    try:
+                        parsed_group_id, user_id = self._parse_user_key(key)
+                        user = self.get(parsed_group_id, user_id)
+                        if user:
+                            users.append(user)
+                    except ValueError:
+                        # Skip keys that don't match the expected format
+                        continue
+            except Exception as e:
+                print(f"error: {e}")
+                return [], 0
 
         # Apply search filter
         if search:

@@ -32,6 +32,8 @@ class AITestStore:
         search: Optional[str] = None,
         group_id: Optional[str] = None,
     ) -> tuple[List[AITestSchema], int]:
+        sql_filtered = False  # Track if SQL filtering was used
+        
         # For SQL stores, use more efficient filtered queries when possible
         try:
             if hasattr(self._store, 'get_filtered'):
@@ -45,24 +47,26 @@ class AITestStore:
                     filters['group_id'] = group_id
                 
                 # Get filtered results
-                test_data = self._store.get_filtered(filters) if filters else []
-                tests = []
-                for data in test_data:
-                    try:
-                        if 'group_id' not in data:
-                            data['group_id'] = None
-                        test = AITestSchema(**data)
-                        tests.append(test)
-                    except Exception:
-                        continue
-                
-                # For SQL stores without specific filters, fall back to getting all
-                if not filters:
-                    # Get all keys and process them
+                if filters:
+                    sql_filtered = True
+                    test_data = self._store.get_filtered(filters)
+                    tests = []
+                    for data in test_data:
+                        try:
+                            if 'group_id' not in data:
+                                data['group_id'] = None
+                            test = AITestSchema(**data)
+                            tests.append(test)
+                        except Exception:
+                            continue
+                else:
+                    # No filters were applied, fall back to keys() approach for SQL stores
                     keys = self._store.keys()
                     if keys:
                         tests = [self.get(key) for key in keys]
                         tests = [t for t in tests if t is not None]
+                    else:
+                        tests = []
             else:
                 raise Exception("Not an SQL store")
         except Exception:
@@ -78,15 +82,16 @@ class AITestStore:
             except Exception as e:
                 return [], 0
 
-        # Apply filters
-        if status:
-            tests = [t for t in tests if t.status == status]
-        if risk_level:
-            tests = [t for t in tests if t.risk_level == risk_level]
-        if group_id:  # Filter by group ownership
-            # Handle None group_id values - treat them as belonging to a default group
-            # Convert both group_id values to strings for comparison
-            tests = [t for t in tests if (t.group_id is None and group_id == "default") or str(t.group_id) == str(group_id)]
+        # Apply filters only if SQL filtering wasn't used
+        if not sql_filtered:
+            if status:
+                tests = [t for t in tests if t.status == status]
+            if risk_level:
+                tests = [t for t in tests if t.risk_level == risk_level]
+            if group_id:  # Filter by group ownership
+                # Handle None group_id values - treat them as belonging to a default group
+                # Convert both group_id values to strings for comparison
+                tests = [t for t in tests if (t.group_id is None and group_id == "default") or str(t.group_id) == str(group_id)]
         if search:
             search_lower = search.lower()
             tests = [

@@ -19,16 +19,40 @@ class GroupStore:
 
     def get_by_name(self, name: str) -> Optional[Group]:
         """Get a group by name."""
-        # Get all groups and filter by name
-        keys = self._store.keys()
-        if not keys:
-            return None
+        # For SQL stores, use more efficient filtered queries when possible
+        try:
+            if hasattr(self._store, 'get_filtered'):
+                # Use SQL filtering by name
+                group_data = self._store.get_filtered({'name': name})
+                if group_data:
+                    try:
+                        return Group(**group_data[0])
+                    except Exception:
+                        pass
+                
+                # If exact match failed, fall back to case-insensitive search
+                all_data = self._store.get_filtered({})
+                for data in all_data:
+                    try:
+                        group = Group(**data)
+                        if group.name.lower() == name.lower():
+                            return group
+                    except Exception:
+                        continue
+                return None
+            else:
+                raise Exception("Not an SQL store")
+        except Exception:
+            # Fallback to Redis-style approach
+            keys = self._store.keys()
+            if not keys:
+                return None
 
-        for key in keys:
-            group = self.get(key)
-            if group and group.name.lower() == name.lower():
-                return group
-        return None
+            for key in keys:
+                group = self.get(key)
+                if group and group.name.lower() == name.lower():
+                    return group
+            return None
 
     def list(
         self,
@@ -38,22 +62,56 @@ class GroupStore:
         search: Optional[str] = None,
     ) -> tuple[List[Group], int]:
         """List groups with pagination and filtering."""
-        keys = self._store.keys()
-
-        if not keys:
-            return [], 0
-
-        # Get all groups
+        sql_filtered = False  # Track if SQL filtering was used
+        
+        # For SQL stores, use more efficient filtered queries when possible
         try:
-            groups = [self.get(key) for key in keys]
-            groups = [g for g in groups if g is not None]  # Filter out None values
-        except Exception as e:
-            print(f"error: {e}")
-            return [], 0
+            if hasattr(self._store, 'get_filtered'):
+                # Build filters for SQL query
+                filters = {}
+                if status:
+                    filters['status'] = status
+                
+                # Get filtered results from SQL
+                if filters:
+                    sql_filtered = True
+                    group_data = self._store.get_filtered(filters)
+                    groups = []
+                    for data in group_data:
+                        try:
+                            group = Group(**data)
+                            groups.append(group)
+                        except Exception:
+                            continue
+                else:
+                    # No filters were applied, fall back to keys() approach for SQL stores
+                    keys = self._store.keys()
+                    if keys:
+                        groups = [self.get(key) for key in keys]
+                        groups = [g for g in groups if g is not None]
+                    else:
+                        groups = []
+            else:
+                raise Exception("Not an SQL store")
+        except Exception:
+            # Fallback to Redis-style approach
+            keys = self._store.keys()
 
-        # Apply filters
-        if status:
-            groups = [g for g in groups if g.status == status]
+            if not keys:
+                return [], 0
+
+            # Get all groups
+            try:
+                groups = [self.get(key) for key in keys]
+                groups = [g for g in groups if g is not None]  # Filter out None values
+            except Exception as e:
+                print(f"error: {e}")
+                return [], 0
+
+        # Apply filters only if SQL filtering wasn't used
+        if not sql_filtered:
+            if status:
+                groups = [g for g in groups if g.status == status]
         if search:
             search_lower = search.lower()
             groups = [

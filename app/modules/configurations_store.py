@@ -54,23 +54,80 @@ class AIConfigurationStore:
         sort_by: str = "created_at",
         sort_order: str = "desc",
     ) -> tuple[List[AIEndpointConfig], int]:
-        keys = self._store.keys()
-        if not keys:
-            return [], 0
-
+        sql_filtered = False  # Track if SQL filtering was used
+        
+        # For SQL stores, use more efficient filtered queries when possible
         try:
-            configs = [self.get(key) for key in keys]
-            configs = [c for c in configs if c is not None]
-        except Exception as e:
-            return [], 0
+            if hasattr(self._store, 'get_filtered'):
+                # Build filters for SQL query
+                filters = {}
+                if status:
+                    filters['status'] = status
+                if provider:
+                    filters['provider'] = provider
+                if created_by:
+                    filters['created_by'] = created_by
+                
+                # Get filtered results from SQL
+                if filters:
+                    sql_filtered = True
+                    config_data = self._store.get_filtered(filters)
+                    configs = []
+                    for data in config_data:
+                        try:
+                            # Clean and validate data like in get() method
+                            cleaned_data = data.copy()
+                            encrypted_fields = ['api_key_encrypted', 'bearer_token_encrypted', 'azure_client_secret_encrypted']
+                            for field in encrypted_fields:
+                                cleaned_data.pop(field, None)
+                            
+                            # Fix empty string values that should be None
+                            nullable_fields = ['last_test_status', 'last_test_error', 'avg_response_time_ms', 'last_tested_at']
+                            for field in nullable_fields:
+                                if field in cleaned_data and cleaned_data[field] == '':
+                                    cleaned_data[field] = None
+                            
+                            # Convert avg_response_time_ms to float if needed
+                            if 'avg_response_time_ms' in cleaned_data and cleaned_data['avg_response_time_ms'] is not None:
+                                try:
+                                    cleaned_data['avg_response_time_ms'] = float(cleaned_data['avg_response_time_ms'])
+                                except (ValueError, TypeError):
+                                    cleaned_data['avg_response_time_ms'] = None
+                            
+                            config = AIEndpointConfig(**cleaned_data)
+                            configs.append(config)
+                        except Exception:
+                            continue
+                else:
+                    # No filters were applied, fall back to keys() approach for SQL stores
+                    keys = self._store.keys()
+                    if keys:
+                        configs = [self.get(key) for key in keys]
+                        configs = [c for c in configs if c is not None]
+                    else:
+                        configs = []
+            else:
+                raise Exception("Not an SQL store")
+        except Exception:
+            # Fallback to Redis-style approach
+            keys = self._store.keys()
+            if not keys:
+                return [], 0
 
-        # Apply filters
-        if status:
-            configs = [c for c in configs if c.status == status]
-        if provider:
-            configs = [c for c in configs if c.provider == provider]
-        if created_by:
-            configs = [c for c in configs if str(c.created_by) == str(created_by)]
+            try:
+                configs = [self.get(key) for key in keys]
+                configs = [c for c in configs if c is not None]
+            except Exception as e:
+                return [], 0
+
+        # Apply filters only if SQL filtering wasn't used
+        if not sql_filtered:
+            if status:
+                configs = [c for c in configs if c.status == status]
+            if provider:
+                configs = [c for c in configs if c.provider == provider]
+            if created_by:
+                configs = [c for c in configs if str(c.created_by) == str(created_by)]
         if search:
             search_lower = search.lower()
             configs = [

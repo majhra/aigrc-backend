@@ -144,9 +144,11 @@ class SQLStore(StoreProtocol):
         # Set the primary key
         record[self.key_column] = key
         
-        # Handle field name mapping: group -> group_id for SQL table compatibility
+        # Handle field name mapping for SQL table compatibility
         if 'group' in record and 'group_id' not in record:
             record['group_id'] = record.pop('group')
+        if 'lastRun_at' in record and 'last_run_at' not in record:
+            record['last_run_at'] = record.pop('lastRun_at')
         
         # Handle special field conversions
         for column_name, column in self.table.columns.items():
@@ -217,10 +219,15 @@ class SQLStore(StoreProtocol):
         for column_name in self.table.columns.keys():
             value = getattr(row, column_name, None)
             
-            # Handle field name mapping: group_id -> group for User schema compatibility
+            # Handle field name mapping for Pydantic schema compatibility
             field_name = column_name
             if column_name == 'group_id':
-                field_name = 'group'
+                # Only map group_id -> group for users table, not for tests table
+                if self.table.name == 'users':
+                    field_name = 'group'
+                # For other tables (like tests), keep group_id as group_id
+            elif column_name == 'last_run_at':
+                field_name = 'lastRun_at'
             
             if value is not None:
                 # Convert UUIDs to strings for compatibility
@@ -239,6 +246,9 @@ class SQLStore(StoreProtocol):
                 # For datetime fields, don't include empty values that would break Pydantic validation
                 if column_name.endswith('_at') or column_name.endswith('_expires_at'):
                     # Skip datetime fields that are None - let Pydantic handle the absence
+                    continue
+                elif column_name.endswith('_id'):
+                    # For UUID fields that are None, skip them so Pydantic gets None instead of empty string
                     continue
                 else:
                     # Include None values as empty strings for non-datetime fields

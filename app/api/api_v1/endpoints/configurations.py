@@ -45,7 +45,14 @@ async def get_configurations(
     """
     logger.info(f"Retrieving AI configurations - page: {page}, limit: {limit}")
     
-    created_by = str(current_user.id) if my_configs else None
+    # Filter by creator: admins can see all, regular users only see their own unless explicitly requesting "my configs"
+    created_by = None
+    if current_user.role != "admin":
+        # Non-admin users can only see their own configurations
+        created_by = str(current_user.id)
+    elif my_configs:
+        # Admin explicitly wants to see only their own configurations
+        created_by = str(current_user.id)
     
     configurations, total = config_store.list(
         page=page,
