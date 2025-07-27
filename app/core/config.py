@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     
     # Database configuration
-    DATABASE_URL: str = "postgresql://aigrc:aigrc_password@postgress-db-1:5432/aigrc"
+    DATABASE_URL: str = ""
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     DATABASE_ECHO: bool = False
@@ -77,6 +77,7 @@ class Settings(BaseSettings):
         "SES_AWS_SENDER_EMAIL",
         "SECRET_KEY",
         "SUPPORT_EMAIL",
+        "DATABASE_URL",
     )
     def compulsory_string_not_empty(cls, value: str) -> str:
         assert value != "", "Variable is not set"
