@@ -1,7 +1,7 @@
-from typing import Dict, List, Optional, Literal
+from typing import Dict, List, Optional, Literal, Union
 from datetime import datetime
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 class ExecutionEnvironment(BaseModel):
     environment_id: Optional[str] = None
@@ -49,6 +49,7 @@ class ExecutedTestSchema(BaseModel):
     test_id: UUID
     executed_at: datetime
     executed_by: UUID
+    group_id: Optional[Union[str, UUID]] = None
     execution_environment: Optional[ExecutionEnvironment] = None
     
     # Input/Output Data
@@ -65,6 +66,13 @@ class ExecutedTestSchema(BaseModel):
     
     # Error Information
     error: Optional[ErrorDetails] = None
+    
+    @field_validator('group_id', mode='before')
+    @classmethod
+    def convert_group_id_to_string(cls, v):
+        if v is None:
+            return None
+        return str(v)
 
 class ExecutedTestList(BaseModel):
     items: List[ExecutedTestSchema]

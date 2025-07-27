@@ -38,15 +38,24 @@ async def get_prompt_categories(
 ):
     """
     Get list of prompt categories with pagination and filtering.
+    Users can only see categories from their own group unless they are admin.
     """
     logger.info(f"Retrieving prompt categories - page: {page}, limit: {limit}")
+    
+    # Filter by group unless user is admin
+    group_filter = None
+    if current_user.role != "admin":
+        group_filter = current_user.group
+        if not group_filter:
+            group_filter = "default"
     
     categories, total = category_store.list(
         page=page,
         limit=limit,
         status=status,
         category_type=category_type,
-        search=search
+        search=search,
+        group_id=group_filter
     )
     
     return PromptCategoryList(
@@ -65,6 +74,7 @@ async def get_prompt_category(
 ):
     """
     Get a specific prompt category by ID.
+    Users can only access categories from their own group unless they are admin.
     """
     logger.info(f"Retrieving prompt category: {category_id}")
     
@@ -74,6 +84,14 @@ async def get_prompt_category(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Prompt category not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and category.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied access to category {category_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Category does not belong to your group"
         )
     
     return category
@@ -104,12 +122,30 @@ async def update_prompt_category(
 ):
     """
     Update a prompt category by ID.
+    Users can only update categories from their own group unless they are admin.
     """
     logger.info(f"Updating prompt category: {category_id}")
     
+    # Check if category exists and user has access
+    existing_category = category_store.get(str(category_id))
+    if not existing_category:
+        logger.error(f"Category not found: {category_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt category not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and existing_category.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied update access to category {category_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Category does not belong to your group"
+        )
+    
     category = category_store.update(str(category_id), category_update)
     if not category:
-        logger.error(f"Category not found: {category_id}")
+        logger.error(f"Category update failed: {category_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Prompt category not found"
@@ -126,12 +162,30 @@ async def delete_prompt_category(
 ):
     """
     Delete a prompt category by ID.
+    Users can only delete categories from their own group unless they are admin.
     """
     logger.info(f"Deleting prompt category: {category_id}")
     
+    # Check if category exists and user has access
+    existing_category = category_store.get(str(category_id))
+    if not existing_category:
+        logger.error(f"Category not found: {category_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt category not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and existing_category.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied delete access to category {category_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Category does not belong to your group"
+        )
+    
     success = category_store.delete(str(category_id))
     if not success:
-        logger.error(f"Category not found: {category_id}")
+        logger.error(f"Category deletion failed: {category_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Prompt category not found"
@@ -156,8 +210,16 @@ async def get_prompts(
 ):
     """
     Get list of prompts with pagination and filtering.
+    Users can only see prompts from their own group unless they are admin.
     """
     logger.info(f"Retrieving prompts - page: {page}, limit: {limit}")
+    
+    # Filter by group unless user is admin
+    group_filter = None
+    if current_user.role != "admin":
+        group_filter = current_user.group
+        if not group_filter:
+            group_filter = "default"
     
     prompts, total = prompt_store.list(
         page=page,
@@ -168,6 +230,7 @@ async def get_prompts(
         risk_level=risk_level,
         search=search,
         tags=tags,
+        group_id=group_filter,
         category_store=category_store
     )
     
@@ -193,15 +256,24 @@ async def get_prompt_sets(
 ):
     """
     Get list of prompt sets with pagination and filtering.
+    Users can only see prompt sets from their own group unless they are admin.
     """
     logger.info(f"Retrieving prompt sets - page: {page}, limit: {limit}")
+    
+    # Filter by group unless user is admin
+    group_filter = None
+    if current_user.role != "admin":
+        group_filter = current_user.group
+        if not group_filter:
+            group_filter = "default"
     
     sets, total = prompt_set_store.list(
         page=page,
         limit=limit,
         status=status,
         category_id=str(category_id) if category_id else None,
-        search=search
+        search=search,
+        group_id=group_filter
     )
     
     return PromptSetList(
@@ -220,6 +292,7 @@ async def get_prompt_set(
 ):
     """
     Get a specific prompt set by ID.
+    Users can only access prompt sets from their own group unless they are admin.
     """
     logger.info(f"Retrieving prompt set: {set_id}")
     
@@ -229,6 +302,14 @@ async def get_prompt_set(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Prompt set not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and prompt_set.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied access to prompt set {set_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Prompt set does not belong to your group"
         )
     
     return prompt_set
@@ -270,8 +351,26 @@ async def update_prompt_set(
 ):
     """
     Update a prompt set by ID.
+    Users can only update prompt sets from their own group unless they are admin.
     """
     logger.info(f"Updating prompt set: {set_id}")
+    
+    # Check if prompt set exists and user has access
+    existing_set = prompt_set_store.get(str(set_id))
+    if not existing_set:
+        logger.error(f"Prompt set not found: {set_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt set not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and existing_set.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied update access to prompt set {set_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Prompt set does not belong to your group"
+        )
     
     # Validate that all prompt IDs exist (if prompt_ids are being updated)
     if set_update.prompt_ids is not None:
@@ -285,7 +384,7 @@ async def update_prompt_set(
     
     prompt_set = prompt_set_store.update(str(set_id), set_update)
     if not prompt_set:
-        logger.error(f"Prompt set not found: {set_id}")
+        logger.error(f"Prompt set update failed: {set_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Prompt set not found"
@@ -302,12 +401,30 @@ async def delete_prompt_set(
 ):
     """
     Delete a prompt set by ID.
+    Users can only delete prompt sets from their own group unless they are admin.
     """
     logger.info(f"Deleting prompt set: {set_id}")
     
+    # Check if prompt set exists and user has access
+    existing_set = prompt_set_store.get(str(set_id))
+    if not existing_set:
+        logger.error(f"Prompt set not found: {set_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt set not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and existing_set.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied delete access to prompt set {set_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Prompt set does not belong to your group"
+        )
+    
     success = prompt_set_store.delete(str(set_id))
     if not success:
-        logger.error(f"Prompt set not found: {set_id}")
+        logger.error(f"Prompt set deletion failed: {set_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Prompt set not found"
@@ -324,6 +441,7 @@ async def get_prompt(
 ):
     """
     Get a specific prompt by ID.
+    Users can only access prompts from their own group unless they are admin.
     """
     logger.info(f"Retrieving prompt: {prompt_id}")
     
@@ -333,6 +451,14 @@ async def get_prompt(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Prompt not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and prompt.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied access to prompt {prompt_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Prompt does not belong to your group"
         )
     
     return prompt
@@ -375,19 +501,28 @@ async def update_prompt(
 ):
     """
     Update a prompt by ID.
+    Users can only update prompts from their own group unless they are admin.
     """
     logger.info(f"Updating prompt: {prompt_id}")
     
+    # Get current prompt to check access and validate updates
+    current_prompt = prompt_store.get(str(prompt_id))
+    if not current_prompt:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and current_prompt.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied update access to prompt {prompt_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Prompt does not belong to your group"
+        )
+    
     # If content or variables are being updated, validate the template
     if prompt_update.content is not None or prompt_update.variables is not None:
-        # Get current prompt to merge with update
-        current_prompt = prompt_store.get(str(prompt_id))
-        if not current_prompt:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Prompt not found"
-            )
-        
         content = prompt_update.content or current_prompt.content
         variables = prompt_update.variables or current_prompt.variables
         
@@ -400,7 +535,7 @@ async def update_prompt(
     
     prompt = prompt_store.update(str(prompt_id), prompt_update)
     if not prompt:
-        logger.error(f"Prompt not found: {prompt_id}")
+        logger.error(f"Prompt update failed: {prompt_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Prompt not found"
@@ -417,12 +552,30 @@ async def delete_prompt(
 ):
     """
     Delete a prompt by ID.
+    Users can only delete prompts from their own group unless they are admin.
     """
     logger.info(f"Deleting prompt: {prompt_id}")
     
+    # Check if prompt exists and user has access
+    existing_prompt = prompt_store.get(str(prompt_id))
+    if not existing_prompt:
+        logger.error(f"Prompt not found: {prompt_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and existing_prompt.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied delete access to prompt {prompt_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Prompt does not belong to your group"
+        )
+    
     success = prompt_store.delete(str(prompt_id))
     if not success:
-        logger.error(f"Prompt not found: {prompt_id}")
+        logger.error(f"Prompt deletion failed: {prompt_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Prompt not found"

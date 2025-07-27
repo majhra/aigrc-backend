@@ -39,6 +39,7 @@ class TestExecution(Base):
     test_id = Column(UUID(as_uuid=True), ForeignKey("ai_tests.id"), index=True)
     executed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     executed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"), index=True)
     execution_environment = Column(JSON)  # ExecutionEnvironment object
     input_variables = Column(JSON)  # Dict[str, str]
     prompt = Column(Text)
@@ -51,3 +52,4 @@ class TestExecution(Base):
     # Relationships
     test = relationship("AITest", back_populates="executions", foreign_keys=[test_id])
     executor = relationship("User", back_populates="executed_tests")
+    group = relationship("Group", back_populates="test_executions")

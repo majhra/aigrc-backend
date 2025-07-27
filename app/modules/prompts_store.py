@@ -33,6 +33,7 @@ class PromptCategoryStore:
         status: Optional[str] = None,
         category_type: Optional[str] = None,
         search: Optional[str] = None,
+        group_id: Optional[str] = None,  # INTERNAL USE ONLY - NOT FROM CLIENT
     ) -> tuple[List[PromptCategory], int]:
         sql_filtered = False  # Track if SQL filtering was used
         
@@ -45,6 +46,8 @@ class PromptCategoryStore:
                     filters['status'] = status
                 if category_type:
                     filters['category_type'] = category_type
+                if group_id:
+                    filters['group_id'] = group_id
                 
                 # Get filtered results from SQL
                 if filters:
@@ -85,6 +88,8 @@ class PromptCategoryStore:
                 categories = [c for c in categories if c.status == status]
             if category_type:
                 categories = [c for c in categories if c.category_type == category_type]
+            if group_id:
+                categories = [c for c in categories if str(c.group_id) == str(group_id)]
         if search:
             search_lower = search.lower()
             categories = [
@@ -112,6 +117,7 @@ class PromptCategoryStore:
         new_category = PromptCategory(
             id=category_id,
             created_by=user.id,
+            group_id=user.group,
             created_at=now,
             updated_at=now,
             **category.model_dump()
@@ -173,6 +179,7 @@ class PromptStore:
         risk_level: Optional[str] = None,
         search: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        group_id: Optional[str] = None,  # INTERNAL USE ONLY - NOT FROM CLIENT
         category_store=None,
     ) -> tuple[List[Prompt], int]:
         sql_filtered = False  # Track if SQL filtering was used
@@ -188,6 +195,8 @@ class PromptStore:
                     filters['category_id'] = category_id
                 if risk_level:
                     filters['risk_level'] = risk_level
+                if group_id:
+                    filters['group_id'] = group_id
                 
                 # Get filtered results from SQL
                 if filters:
@@ -230,6 +239,8 @@ class PromptStore:
                 prompts = [p for p in prompts if str(p.category_id) == str(category_id)]
             if risk_level:
                 prompts = [p for p in prompts if p.risk_level == risk_level]
+            if group_id:
+                prompts = [p for p in prompts if str(p.group_id) == str(group_id)]
         if category_type and category_store:
             # Get all categories with the specified type
             matching_categories, _ = category_store.list()
@@ -273,6 +284,7 @@ class PromptStore:
         new_prompt = Prompt(
             id=prompt_id,
             created_by=user.id,
+            group_id=user.group,
             created_at=now,
             updated_at=now,
             **prompt.model_dump()
@@ -345,6 +357,7 @@ class PromptSetStore:
         status: Optional[str] = None,
         category_id: Optional[str] = None,
         search: Optional[str] = None,
+        group_id: Optional[str] = None,  # INTERNAL USE ONLY - NOT FROM CLIENT
     ) -> tuple[List[PromptSet], int]:
         sql_filtered = False  # Track if SQL filtering was used
         
@@ -357,6 +370,8 @@ class PromptSetStore:
                     filters['status'] = status
                 if category_id:
                     filters['category_id'] = category_id
+                if group_id:
+                    filters['group_id'] = group_id
                 
                 # Get filtered results from SQL
                 if filters:
@@ -397,6 +412,8 @@ class PromptSetStore:
                 sets = [s for s in sets if s.status == status]
             if category_id:
                 sets = [s for s in sets if str(s.category_id) == str(category_id)]
+            if group_id:
+                sets = [s for s in sets if str(s.group_id) == str(group_id)]
         if search:
             search_lower = search.lower()
             sets = [
@@ -424,6 +441,7 @@ class PromptSetStore:
         new_set = PromptSet(
             id=set_id,
             created_by=user.id,
+            group_id=user.group,
             created_at=now,
             updated_at=now,
             **prompt_set.model_dump()

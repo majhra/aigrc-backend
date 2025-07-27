@@ -20,6 +20,10 @@ class Group(Base):
     # Relationships
     users = relationship("User", back_populates="group")
     tests = relationship("AITest", back_populates="group")
+    configurations = relationship("AIConfiguration", back_populates="group")
+    prompts = relationship("Prompt", back_populates="group")
+    prompt_categories = relationship("PromptCategory", back_populates="group")
+    test_executions = relationship("TestExecution", back_populates="group")
 
 
 class User(Base):

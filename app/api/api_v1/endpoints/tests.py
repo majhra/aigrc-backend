@@ -263,7 +263,8 @@ async def execute_test(
                 error={
                     "code": "AI_CONNECTION_ERROR",
                     "message": str(ai_error)
-                }
+                },
+                test_group_id=test.group_id
             )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -278,7 +279,8 @@ async def execute_test(
             user=current_user,
             prompt=formatted_prompt,
             response=response,
-            benchmarks=benchmarks
+            benchmarks=benchmarks,
+            test_group_id=test.group_id
         )
         
         # Verify the execution was properly indexed
@@ -328,7 +330,8 @@ async def execute_test(
                 error={
                     "code": "EXECUTION_ERROR",
                     "message": str(e)
-                }
+                },
+                test_group_id=test.group_id
             )
             # Clean up the error execution if it was created but indexing failed
             if error_execution:

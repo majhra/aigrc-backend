@@ -155,9 +155,24 @@ class ExecutedTestStore:
         response: str,
         benchmarks: Optional[Dict] = None,
         error: Optional[Dict] = None,
+        test_group_id: Optional[str] = None,  # Pass group_id from test
     ) -> ExecutedTestSchema:
         now = datetime.now(timezone.utc)
         execution_id = str(uuid4())
+        
+        # If test_group_id not provided, try to get it from the test
+        group_id = test_group_id
+        if not group_id:
+            # Try to get the test from the store to inherit its group_id
+            try:
+                from app.modules.tests_store import AITestStore
+                test_store = AITestStore(self._store)
+                test = test_store.get(test_id)
+                if test:
+                    group_id = test.group_id
+            except Exception:
+                # If we can't get the test, fall back to user's group
+                group_id = user.group
         
         # Convert benchmarks dict to PerformanceMetrics object if provided
         benchmarks_obj = None
@@ -185,6 +200,7 @@ class ExecutedTestStore:
             test_id=test_id,
             executed_at=now,
             executed_by=user.id,
+            group_id=group_id,  # Inherit group_id from test
             execution_environment=execution.execution_environment,
             input_variables=execution.input_variables,
             prompt=prompt,

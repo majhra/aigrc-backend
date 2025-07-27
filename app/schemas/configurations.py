@@ -1,4 +1,4 @@
-from typing import Literal, List, Optional, Dict, Any
+from typing import Literal, List, Optional, Dict, Any, Union
 from pydantic import BaseModel, UUID4, Field, field_validator, ConfigDict
 from datetime import datetime
 from uuid import UUID
@@ -84,6 +84,7 @@ class AIEndpointConfig(AIEndpointConfigBase):
     id: UUID4
     status: Literal["active", "inactive", "testing"] = "testing"
     created_by: UUID4
+    group_id: Optional[Union[str, UUID]] = None
     created_at: datetime
     updated_at: datetime
     last_tested_at: datetime | None = None
@@ -134,6 +135,14 @@ class AIEndpointConfig(AIEndpointConfigBase):
     @property
     def rate_limit_rpm(self) -> int | None:
         return self.connection_config.get("rate_limit_rpm")
+    
+    # Field validators
+    @field_validator('group_id', mode='before')
+    @classmethod
+    def convert_group_id_to_string(cls, v):
+        if v is None:
+            return None
+        return str(v)
     
     # NOTE: Sensitive auth data is NOT included in the response model
 

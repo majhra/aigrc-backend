@@ -19,6 +19,7 @@ class AIConfiguration(Base):
     tags = Column(JSON)  # Array of strings
     status = Column(String(20), nullable=False, default="active")  # active, inactive, testing
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"), index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     last_tested_at = Column(DateTime(timezone=True))
@@ -44,3 +45,4 @@ class AIConfiguration(Base):
 
     # Relationships
     creator = relationship("User", back_populates="created_configurations")
+    group = relationship("Group", back_populates="configurations")

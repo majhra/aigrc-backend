@@ -42,16 +42,20 @@ async def get_configurations(
 ):
     """
     Get list of AI endpoint configurations with pagination and filtering.
+    Users can only see configurations from their own group unless they are admin.
     """
     logger.info(f"Retrieving AI configurations - page: {page}, limit: {limit}")
     
-    # Filter by creator: admins can see all, regular users only see their own unless explicitly requesting "my configs"
-    created_by = None
+    # Filter by group unless user is admin
+    group_filter = None
     if current_user.role != "admin":
-        # Non-admin users can only see their own configurations
-        created_by = str(current_user.id)
-    elif my_configs:
-        # Admin explicitly wants to see only their own configurations
+        group_filter = current_user.group
+        if not group_filter:
+            group_filter = "default"
+    
+    # Filter by creator if requested
+    created_by = None
+    if my_configs:
         created_by = str(current_user.id)
     
     configurations, total = config_store.list(
@@ -60,6 +64,7 @@ async def get_configurations(
         status=status,
         provider=provider,
         search=search,
+        group_id=group_filter,
         created_by=created_by,
         sort_by=sort_by,
         sort_order=sort_order
@@ -81,6 +86,7 @@ async def get_configuration(
 ):
     """
     Get a specific AI endpoint configuration by ID.
+    Users can only access configurations from their own group unless they are admin.
     """
     logger.info(f"Retrieving AI configuration: {config_id}")
     
@@ -90,6 +96,14 @@ async def get_configuration(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="AI configuration not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and configuration.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied access to configuration {config_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Configuration does not belong to your group"
         )
     
     return configuration
@@ -136,12 +150,30 @@ async def update_configuration(
 ):
     """
     Update an AI endpoint configuration by ID.
+    Users can only update configurations from their own group unless they are admin.
     """
     logger.info(f"Updating AI configuration: {config_id}")
     
+    # Check if configuration exists and user has access
+    existing_config = config_store.get(str(config_id))
+    if not existing_config:
+        logger.error(f"Configuration not found: {config_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="AI configuration not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and existing_config.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied update access to configuration {config_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Configuration does not belong to your group"
+        )
+    
     configuration = config_store.update(str(config_id), config_update)
     if not configuration:
-        logger.error(f"Configuration not found: {config_id}")
+        logger.error(f"Configuration update failed: {config_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="AI configuration not found"
@@ -158,12 +190,30 @@ async def delete_configuration(
 ):
     """
     Delete an AI endpoint configuration by ID.
+    Users can only delete configurations from their own group unless they are admin.
     """
     logger.info(f"Deleting AI configuration: {config_id}")
     
+    # Check if configuration exists and user has access
+    existing_config = config_store.get(str(config_id))
+    if not existing_config:
+        logger.error(f"Configuration not found: {config_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="AI configuration not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and existing_config.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied delete access to configuration {config_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Configuration does not belong to your group"
+        )
+    
     success = config_store.delete(str(config_id))
     if not success:
-        logger.error(f"Configuration not found: {config_id}")
+        logger.error(f"Configuration deletion failed: {config_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="AI configuration not found"
@@ -181,6 +231,7 @@ async def test_configuration(
 ):
     """
     Test an AI endpoint configuration with a sample request.
+    Users can only test configurations from their own group unless they are admin.
     """
     logger.info(f"Testing AI configuration: {config_id}")
     
@@ -190,6 +241,14 @@ async def test_configuration(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="AI configuration not found"
+        )
+    
+    # Check group ownership unless user is admin
+    if current_user.role != "admin" and configuration.group_id != current_user.group:
+        logger.warning(f"User {current_user.id} denied test access to configuration {config_id} from different group")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Configuration does not belong to your group"
         )
     
     # Get sensitive data

@@ -17,12 +17,14 @@ class PromptCategory(Base):
     tags = Column(JSON)
     status = Column(String(20), nullable=False, default="ACTIVE")  # ACTIVE, ARCHIVED
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"), index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     prompt_count = Column(Integer, default=0)
 
     # Relationships
     creator = relationship("User", back_populates="created_prompt_categories")
+    group = relationship("Group", back_populates="prompt_categories")
     prompts = relationship("Prompt", back_populates="category")
 
 
@@ -41,6 +43,7 @@ class Prompt(Base):
     version = Column(Integer, nullable=False, default=1)
     status = Column(String(20), nullable=False, default="DRAFT")  # DRAFT, ACTIVE, ARCHIVED
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"), index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     last_used_at = Column(DateTime(timezone=True))
@@ -48,4 +51,5 @@ class Prompt(Base):
 
     # Relationships
     creator = relationship("User", back_populates="created_prompts")
+    group = relationship("Group", back_populates="prompts")
     category = relationship("PromptCategory", back_populates="prompts")

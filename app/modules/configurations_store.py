@@ -50,6 +50,7 @@ class AIConfigurationStore:
         status: Optional[str] = None,
         provider: Optional[str] = None,
         search: Optional[str] = None,
+        group_id: Optional[str] = None,  # INTERNAL USE ONLY - NOT FROM CLIENT
         created_by: Optional[str] = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
@@ -65,6 +66,8 @@ class AIConfigurationStore:
                     filters['status'] = status
                 if provider:
                     filters['provider'] = provider
+                if group_id:
+                    filters['group_id'] = group_id
                 if created_by:
                     filters['created_by'] = created_by
                 
@@ -126,6 +129,8 @@ class AIConfigurationStore:
                 configs = [c for c in configs if c.status == status]
             if provider:
                 configs = [c for c in configs if c.provider == provider]
+            if group_id:
+                configs = [c for c in configs if str(c.group_id) == str(group_id)]
             if created_by:
                 configs = [c for c in configs if str(c.created_by) == str(created_by)]
         if search:
@@ -196,6 +201,7 @@ class AIConfigurationStore:
         new_config = AIEndpointConfig(
             id=config_id,
             created_by=user.id,
+            group_id=user.group,
             created_at=now,
             updated_at=now,
             connection_config=connection_config,
@@ -322,6 +328,19 @@ class AIConfigurationStore:
         
         self._store.put(config_id, existing_config.model_dump())
         return existing_config
+
+    def belongs_to_group(self, config_id: str, group_id: str) -> bool:
+        """Check if a configuration belongs to a specific group."""
+        config = self.get(config_id)
+        if not config:
+            return False
+        return str(config.group_id) == str(group_id)
+
+    def get_configs_by_group(self, group_id: str) -> List[AIEndpointConfig]:
+        """Get all configurations belonging to a specific group."""
+        configs, _ = self.list(group_id=group_id, page=1, limit=1000)
+        return configs
+
 
 class AIProviderService:
     """Service for managing AI provider information and templates"""

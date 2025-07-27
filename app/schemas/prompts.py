@@ -1,5 +1,5 @@
-from typing import Literal, List, Optional, Dict, Any
-from pydantic import BaseModel, UUID4, Field
+from typing import Literal, List, Optional, Dict, Any, Union
+from pydantic import BaseModel, UUID4, Field, field_validator
 from datetime import datetime
 from uuid import UUID
 
@@ -26,9 +26,17 @@ class PromptCategory(PromptCategoryBase):
     id: UUID4
     status: Literal["ACTIVE", "ARCHIVED"] = "ACTIVE"
     created_by: UUID4
+    group_id: Optional[Union[str, UUID]] = None
     created_at: datetime
     updated_at: datetime
     prompt_count: int = 0  # Number of prompts in this category
+    
+    @field_validator('group_id', mode='before')
+    @classmethod
+    def convert_group_id_to_string(cls, v):
+        if v is None:
+            return None
+        return str(v)
 
 # Prompt Variable Definition
 class PromptVariable(BaseModel):
@@ -70,10 +78,18 @@ class Prompt(PromptBase):
     version: int = 1
     status: Literal["DRAFT", "ACTIVE", "ARCHIVED"] = "DRAFT"
     created_by: UUID4
+    group_id: Optional[Union[str, UUID]] = None
     created_at: datetime
     updated_at: datetime
     last_used_at: datetime | None = None
     usage_count: int = 0
+    
+    @field_validator('group_id', mode='before')
+    @classmethod
+    def convert_group_id_to_string(cls, v):
+        if v is None:
+            return None
+        return str(v)
 
 # Prompt Version History
 class PromptVersion(BaseModel):
@@ -109,8 +125,16 @@ class PromptSet(PromptSetBase):
     prompt_ids: List[UUID4]
     status: Literal["ACTIVE", "ARCHIVED"] = "ACTIVE"
     created_by: UUID4
+    group_id: Optional[Union[str, UUID]] = None
     created_at: datetime
     updated_at: datetime
+    
+    @field_validator('group_id', mode='before')
+    @classmethod
+    def convert_group_id_to_string(cls, v):
+        if v is None:
+            return None
+        return str(v)
 
 # Response Models with Pagination
 class PromptCategoryList(BaseModel):
