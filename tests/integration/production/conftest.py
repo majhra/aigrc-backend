@@ -280,6 +280,16 @@ def assert_not_found(response: APIResponse):
 
 
 # Pytest configuration
+def pytest_addoption(parser):
+    """Add custom command line options"""
+    parser.addoption(
+        "--production",
+        action="store_true",
+        default=False,
+        help="Run production integration tests (normally skipped)"
+    )
+
+
 def pytest_configure(config):
     """Configure pytest for production integration testing"""
     config.addinivalue_line(
@@ -295,11 +305,20 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection for production integration tests"""
+    # Only skip if --production flag is NOT passed
+    skip_production = not config.getoption("--production", default=False)
+    
     for item in items:
-        # Add integration marker to all tests in this directory
-        item.add_marker(pytest.mark.integration)
-        item.add_marker(pytest.mark.production)
-        
-        # Mark tests that might be slow
-        if "comprehensive" in item.name or "full_crud" in item.name:
-            item.add_marker(pytest.mark.slow)
+        # Only process items that are actually in the production directory
+        if "tests/integration/production" in str(item.fspath):
+            # Add markers to tests in this directory
+            item.add_marker(pytest.mark.integration)
+            item.add_marker(pytest.mark.production)
+            
+            # Skip production tests unless --production flag is used
+            if skip_production:
+                item.add_marker(pytest.mark.skip(reason="Production tests require --production flag to run"))
+            
+            # Mark tests that might be slow
+            if "comprehensive" in item.name or "full_crud" in item.name:
+                item.add_marker(pytest.mark.slow)

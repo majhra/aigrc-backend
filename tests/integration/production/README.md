@@ -114,18 +114,24 @@ python run_production_tests.py --backend-url http://localhost:80
 
 ### Direct Pytest Usage
 
+**IMPORTANT**: Production tests require the `--production` flag to run, preventing accidental execution during regular test runs.
+
 ```bash
 # Run specific test file
-pytest test_production_integration.py -v
+pytest test_production_integration.py -v --production
 
-# Run specific test class
-pytest test_production_integration.py::TestGetEndpoints -v
+# Run specific test class  
+pytest test_production_integration.py::TestGetEndpoints -v --production
 
 # Run with markers
-pytest -m "security and not slow" -v
+pytest -m "security and not slow" -v --production
+
+# Run without production flag (tests will be skipped)
+pytest test_production_integration.py -v
+# Output: SKIPPED [1] Production tests require --production flag to run
 
 # Run with coverage
-pytest --cov=app --cov-report=html
+pytest --cov=app --cov-report=html --production
 ```
 
 ## Test Structure

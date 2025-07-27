@@ -99,6 +99,7 @@ def main():
     
     # Additional pytest options
     cmd.extend([
+        "--production",  # Always add --production flag for this runner
         "--tb=short",
         "--strict-markers", 
         "--disable-warnings",

@@ -101,8 +101,43 @@ you can then connect to it via http://127.0.0.1:8888/docs
 This will launch a Redis server and will be automatically deleted after the container exits. Visit [http://localhost:8001/](http://localhost:8001/) to view the RedisInsight dashboard.
 
 ### Running Tests
-- `pip install -r requirements/dev.txt`
-- `python -m pytest`
+
+#### Development Tests
+```bash
+# Install test dependencies
+pip install -r requirements/dev.txt
+
+# Run unit and integration tests
+python -m pytest
+
+# Run with coverage
+pytest --cov=app
+```
+
+#### Production Integration Tests
+For comprehensive production-level testing against the live backend:
+
+```bash
+# Navigate to production test directory
+cd tests/integration/production
+
+# Run all production tests (requires --production flag)
+python run_production_tests.py
+
+# Run specific test categories
+python run_production_tests.py --security    # Security tests only
+python run_production_tests.py --crud        # CRUD operation tests
+python run_production_tests.py --auth        # Authentication tests
+python run_production_tests.py --quick       # Skip slow tests
+
+# Generate detailed HTML report
+python run_production_tests.py --report
+
+# Run with pytest directly (requires --production flag)
+pytest test_production_integration.py --production -v
+```
+
+**Note**: Production tests require the `--production` flag to prevent accidental execution during regular development. They test against the actual backend service and perform comprehensive validation of all API endpoints, security, and performance characteristics.
 
 ## Known Issues & TODOs
 - Admin role check needs to be implemented for user management endpoints
