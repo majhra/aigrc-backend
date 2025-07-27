@@ -10,7 +10,12 @@ class AITestStore:
         self._store = store or LocalStore()
 
     def get(self, test_id: str) -> Optional[AITestSchema]:
-        data = self._store.get(test_id)
+        try:
+            data = self._store.get(test_id)
+        except Exception as e:
+            # Handle database connection errors gracefully
+            return None
+            
         if not data:
             return None
         

@@ -118,8 +118,10 @@ class ExecutedTestStore:
         # Get all executions
         executions = []
         for key in keys:
+            # Convert key to string to handle both UUID and string keys
+            key_str = str(key)
             # Skip index keys
-            if key.startswith(self._test_to_executions_prefix):
+            if key_str.startswith(self._test_to_executions_prefix):
                 continue
                 
             try:
