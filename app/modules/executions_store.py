@@ -82,6 +82,14 @@ class ExecutedTestStore:
         if data.get('response') is None:
             data['response'] = ""
         
+        # Fix input_variables if it's an empty string or invalid type
+        if data.get('input_variables') == "" or not isinstance(data.get('input_variables'), (dict, type(None))):
+            data['input_variables'] = None
+        
+        # Fix error field if it's an empty string or invalid type
+        if data.get('error') == "" or not isinstance(data.get('error'), (dict, type(None))):
+            data['error'] = None
+        
         try:
             return ExecutedTestSchema(**data)
         except Exception as e:
@@ -226,13 +234,21 @@ class ExecutedTestStore:
         if not execution:
             return None
 
+        # Convert UUID objects to strings in validation data
+        validation_copy = validation.copy()
+        if 'validator_id' in validation_copy and hasattr(validation_copy['validator_id'], '__str__'):
+            validation_copy['validator_id'] = str(validation_copy['validator_id'])
+
         # Add validation event
-        execution.validations.append(ValidationEvent(**validation))
+        execution.validations.append(ValidationEvent(**validation_copy))
         
         # Update validation status
         if len(execution.validations) > 0:
             execution.validation_status = "VALIDATED"
-        self._store.put(execution_id, execution.model_dump())
+        
+        # Convert the model to dict with proper UUID serialization
+        execution_data = execution.model_dump(mode='json')
+        self._store.put(execution_id, execution_data)
         return execution
 
     def list_outstanding_tasks(
