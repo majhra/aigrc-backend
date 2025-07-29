@@ -1117,14 +1117,14 @@ Memory usage: Low (single result set)
 - [x] ~~All existing tests pass with new query() method~~ ✅ **COMPLETED**
 - [x] ~~ExecutedTestStore migration to query() method~~ ✅ **COMPLETED**
 - [x] ~~UserStore migration to query() method with SQL text search~~ ✅ **COMPLETED**
-- [ ] AITestStore migration to query() method
-- [ ] PromptStore/PromptCategoryStore migration to query() method  
+- [x] ~~AITestStore migration to query() method~~ ✅ **COMPLETED**
+- [x] ~~PromptStore/PromptCategoryStore migration to query() method~~ ✅ **COMPLETED**
 - [ ] AIConfigurationStore and GroupStore migration to query() method
 - [ ] Performance improvement of 10x+ for list operations
-- [ ] All existing tests pass without modification
-- [ ] Pagination works correctly with new implementation
-- [ ] Filtering works correctly with new implementation
-- [ ] `keys()` method preserved for Redis compatibility
+- [x] ~~All existing tests pass without modification~~ ✅ **COMPLETED**
+- [x] ~~Pagination works correctly with new implementation~~ ✅ **COMPLETED**
+- [x] ~~Filtering works correctly with new implementation~~ ✅ **COMPLETED**
+- [x] ~~`keys()` method preserved for Redis compatibility~~ ✅ **COMPLETED**
 - [ ] Performance benchmarks documented
 - [x] ~~Unit tests for new query() methods and helper functions~~ ✅ **COMPLETED**
 

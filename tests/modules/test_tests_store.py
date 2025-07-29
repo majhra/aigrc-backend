@@ -383,6 +383,10 @@ class TestAITestStore(unittest.TestCase):
             **self.test_data.model_dump()
         )
         
+        # Add query method to mock store for new implementation
+        self.mock_store.query.return_value = [test_schema.model_dump()]
+        
+        # Also setup fallback methods for compatibility
         self.mock_store.keys.return_value = test_keys
         self.mock_store.get.return_value = test_schema.model_dump()
         

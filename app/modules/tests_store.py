@@ -37,12 +37,10 @@ class AITestStore:
         search: Optional[str] = None,
         group_id: Optional[str] = None,
     ) -> tuple[List[AITestSchema], int]:
-        sql_filtered = False  # Track if SQL filtering was used
-        
-        # For SQL stores, use more efficient filtered queries when possible
+        # Try efficient query() method first
         try:
-            if hasattr(self._store, 'get_filtered'):
-                # Build filters
+            if hasattr(self._store, 'query'):
+                # Build filters for database-level filtering
                 filters = {}
                 if status:
                     filters['status'] = status
@@ -51,52 +49,91 @@ class AITestStore:
                 if group_id:
                     filters['group_id'] = group_id
                 
-                # Get filtered results
-                if filters:
-                    sql_filtered = True
-                    test_data = self._store.get_filtered(filters)
-                    tests = []
-                    for data in test_data:
-                        try:
-                            if 'group_id' not in data:
-                                data['group_id'] = None
-                            test = AITestSchema(**data)
-                            tests.append(test)
-                        except Exception:
-                            continue
-                else:
-                    # No filters were applied, fall back to keys() approach for SQL stores
-                    keys = self._store.keys()
-                    if keys:
-                        tests = [self.get(key) for key in keys]
-                        tests = [t for t in tests if t is not None]
-                    else:
-                        tests = []
+                # Add search filters if provided (SQL text search)
+                if search:
+                    search_pattern = f"%{search}%"
+                    filters['_or'] = [
+                        {'name__ilike': search_pattern},
+                        {'description__ilike': search_pattern}
+                    ]
+                
+                # Get filtered results with pagination
+                test_data, total_count = self._store.query(
+                    filters=filters,
+                    keys_only=False,
+                    page=page,
+                    limit=limit,
+                    order_by="created_at",
+                    order_direction="desc"
+                )
+                
+                # Convert to schema objects
+                tests = []
+                for data in test_data:
+                    try:
+                        # Ensure group_id field exists for backward compatibility
+                        if 'group_id' not in data:
+                            data['group_id'] = None
+                        test = AITestSchema(**data)
+                        tests.append(test)
+                    except Exception:
+                        continue
+                
+                # For search queries involving tags, we need post-processing
+                # since tags are complex JSON arrays that require Python filtering
+                if search and tests:
+                    search_lower = search.lower()
+                    filtered_tests = []
+                    for test in tests:
+                        # Check if already matched by name/description (keep it)
+                        name_match = search_lower in test.name.lower()
+                        desc_match = search_lower in test.description.lower()
+                        tag_match = any(search_lower in tag.lower() for tag in test.tags)
+                        
+                        if name_match or desc_match or tag_match:
+                            filtered_tests.append(test)
+                    
+                    return filtered_tests, len(filtered_tests)
+                
+                return tests, total_count
             else:
-                raise Exception("Not an SQL store")
+                # Fallback to old method for non-query supporting stores
+                return self._list_fallback(page, limit, status, risk_level, search, group_id)
+                
         except Exception:
             # Fallback to Redis-style approach
-            keys = self._store.keys()
-            if not keys:
-                return [], 0
+            return self._list_fallback(page, limit, status, risk_level, search, group_id)
 
-            # Get all tests
-            try:
-                tests = [self.get(key) for key in keys]
-                tests = [t for t in tests if t is not None]  # Filter out None values
-            except Exception as e:
-                return [], 0
+    def _list_fallback(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        status: Optional[str] = None,
+        risk_level: Optional[str] = None,
+        search: Optional[str] = None,
+        group_id: Optional[str] = None,
+    ) -> tuple[List[AITestSchema], int]:
+        """Fallback method using the old Redis-style keys() approach."""
+        keys = self._store.keys()
+        if not keys:
+            return [], 0
 
-        # Apply filters only if SQL filtering wasn't used
-        if not sql_filtered:
-            if status:
-                tests = [t for t in tests if t.status == status]
-            if risk_level:
-                tests = [t for t in tests if t.risk_level == risk_level]
-            if group_id:  # Filter by group ownership
-                # Handle None group_id values - treat them as belonging to a default group
-                # Convert both group_id values to strings for comparison
-                tests = [t for t in tests if (t.group_id is None and group_id == "default") or str(t.group_id) == str(group_id)]
+        # Get all tests
+        try:
+            tests = [self.get(key) for key in keys]
+            tests = [t for t in tests if t is not None]  # Filter out None values
+        except Exception:
+            return [], 0
+
+        # Apply filters
+        if status:
+            tests = [t for t in tests if t.status == status]
+        if risk_level:
+            tests = [t for t in tests if t.risk_level == risk_level]
+        if group_id:  # Filter by group ownership
+            # Handle None group_id values - treat them as belonging to a default group
+            # Convert both group_id values to strings for comparison
+            tests = [t for t in tests if (t.group_id is None and group_id == "default") or str(t.group_id) == str(group_id)]
         if search:
             search_lower = search.lower()
             tests = [
@@ -182,8 +219,37 @@ class AITestStore:
 
     def get_tests_by_group(self, group_id: str) -> List[AITestSchema]:
         """Get all tests belonging to a specific group."""
-        tests, _ = self.list(group_id=group_id, page=1, limit=1000)  # Get all tests for the group
-        return tests
+        try:
+            if hasattr(self._store, 'query'):
+                # Use efficient query method without pagination
+                test_data = self._store.query(
+                    filters={'group_id': group_id},
+                    keys_only=False,
+                    order_by="created_at",
+                    order_direction="desc"
+                )
+                
+                # Convert to schema objects
+                tests = []
+                for data in test_data:
+                    try:
+                        # Ensure group_id field exists for backward compatibility
+                        if 'group_id' not in data:
+                            data['group_id'] = None
+                        test = AITestSchema(**data)
+                        tests.append(test)
+                    except Exception:
+                        continue
+                
+                return tests
+            else:
+                # Fallback to paginated approach for non-query stores
+                tests, _ = self.list(group_id=group_id, page=1, limit=1000)
+                return tests
+        except Exception:
+            # Fallback to paginated approach
+            tests, _ = self.list(group_id=group_id, page=1, limit=1000)
+            return tests
 
 
     def clear(self) -> None:

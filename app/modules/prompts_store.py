@@ -35,12 +35,10 @@ class PromptCategoryStore:
         search: Optional[str] = None,
         group_id: Optional[str] = None,  # INTERNAL USE ONLY - NOT FROM CLIENT
     ) -> tuple[List[PromptCategory], int]:
-        sql_filtered = False  # Track if SQL filtering was used
-        
-        # For SQL stores, use more efficient filtered queries when possible
+        # Try efficient query() method first
         try:
-            if hasattr(self._store, 'get_filtered'):
-                # Build filters for SQL query
+            if hasattr(self._store, 'query'):
+                # Build filters for database-level filtering
                 filters = {}
                 if status:
                     filters['status'] = status
@@ -49,47 +47,79 @@ class PromptCategoryStore:
                 if group_id:
                     filters['group_id'] = group_id
                 
-                # Get filtered results from SQL
-                if filters:
-                    sql_filtered = True
-                    category_data = self._store.get_filtered(filters)
-                    categories = []
-                    for data in category_data:
-                        try:
-                            category = PromptCategory(**data)
-                            categories.append(category)
-                        except Exception:
-                            continue
-                else:
-                    # No filters were applied, fall back to keys() approach for SQL stores
-                    keys = self._store.keys()
-                    if keys:
-                        categories = [self.get(key) for key in keys]
-                        categories = [c for c in categories if c is not None]
+                # Add search filters if provided (SQL text search with OR conditions)
+                if search:
+                    search_pattern = f"%{search}%"
+                    search_conditions = [
+                        {'name__ilike': search_pattern},
+                        {'description__ilike': search_pattern},
+                        {'tags__ilike': search_pattern}  # JSON field search for tags
+                    ]
+                    
+                    # Combine with existing filters using AND logic
+                    if filters:
+                        # We need both the existing filters AND the search conditions
+                        all_filters = dict(filters)  # Copy existing filters
+                        all_filters['_or'] = search_conditions
+                        filters = all_filters
                     else:
-                        categories = []
+                        filters = {'_or': search_conditions}
+                
+                # Get filtered results with pagination
+                category_data, total_count = self._store.query(
+                    filters=filters,
+                    keys_only=False,
+                    page=page,
+                    limit=limit,
+                    order_by="name",
+                    order_direction="asc"
+                )
+                
+                # Convert to schema objects
+                categories = []
+                for data in category_data:
+                    try:
+                        category = PromptCategory(**data)
+                        categories.append(category)
+                    except Exception:
+                        continue
+                
+                return categories, total_count
             else:
-                raise Exception("Not an SQL store")
+                # Fallback to old method for non-query supporting stores
+                return self._list_fallback(page, limit, status, category_type, search, group_id)
+                
         except Exception:
             # Fallback to Redis-style approach
-            keys = self._store.keys()
-            if not keys:
-                return [], 0
+            return self._list_fallback(page, limit, status, category_type, search, group_id)
+    
+    def _list_fallback(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        status: Optional[str] = None,
+        category_type: Optional[str] = None,
+        search: Optional[str] = None,
+        group_id: Optional[str] = None,
+    ) -> tuple[List[PromptCategory], int]:
+        """Fallback method using the old Redis-style keys() approach."""
+        keys = self._store.keys()
+        if not keys:
+            return [], 0
 
-            try:
-                categories = [self.get(key) for key in keys]
-                categories = [c for c in categories if c is not None]
-            except Exception as e:
-                return [], 0
+        try:
+            categories = [self.get(key) for key in keys]
+            categories = [c for c in categories if c is not None]
+        except Exception:
+            return [], 0
 
-        # Apply filters only if SQL filtering wasn't used
-        if not sql_filtered:
-            if status:
-                categories = [c for c in categories if c.status == status]
-            if category_type:
-                categories = [c for c in categories if c.category_type == category_type]
-            if group_id:
-                categories = [c for c in categories if str(c.group_id) == str(group_id)]
+        # Apply filters
+        if status:
+            categories = [c for c in categories if c.status == status]
+        if category_type:
+            categories = [c for c in categories if c.category_type == category_type]
+        if group_id:
+            categories = [c for c in categories if str(c.group_id) == str(group_id)]
         if search:
             search_lower = search.lower()
             categories = [
@@ -182,12 +212,10 @@ class PromptStore:
         group_id: Optional[str] = None,  # INTERNAL USE ONLY - NOT FROM CLIENT
         category_store=None,
     ) -> tuple[List[Prompt], int]:
-        sql_filtered = False  # Track if SQL filtering was used
-        
-        # For SQL stores, use more efficient filtered queries when possible
+        # Try efficient query() method first
         try:
-            if hasattr(self._store, 'get_filtered'):
-                # Build filters for SQL query
+            if hasattr(self._store, 'query'):
+                # Build filters for database-level filtering
                 filters = {}
                 if status:
                     filters['status'] = status
@@ -198,49 +226,109 @@ class PromptStore:
                 if group_id:
                     filters['group_id'] = group_id
                 
-                # Get filtered results from SQL
-                if filters:
-                    sql_filtered = True
-                    prompt_data = self._store.get_filtered(filters)
-                    prompts = []
-                    for data in prompt_data:
-                        try:
-                            prompt = Prompt(**data)
-                            prompts.append(prompt)
-                        except Exception:
-                            continue
-                else:
-                    # No filters were applied, fall back to keys() approach for SQL stores
-                    keys = self._store.keys()
-                    if keys:
-                        prompts = [self.get(key) for key in keys]
-                        prompts = [p for p in prompts if p is not None]
+                # Handle category_type by getting matching category IDs
+                if category_type and category_store:
+                    matching_categories, _ = category_store.list(category_type=category_type)
+                    matching_category_ids = [str(cat.id) for cat in matching_categories]
+                    if matching_category_ids:
+                        filters['category_id__in'] = matching_category_ids
                     else:
-                        prompts = []
+                        # No matching categories, return empty result  
+                        return [], 0
+                
+                # Add search filters if provided (SQL text search with OR conditions)
+                if search:
+                    search_pattern = f"%{search}%"
+                    search_conditions = [
+                        {'name__ilike': search_pattern},
+                        {'description__ilike': search_pattern},
+                        {'content__ilike': search_pattern},
+                        {'tags__ilike': search_pattern}  # JSON field search for tags
+                    ]
+                    
+                    # Combine with existing filters using AND logic
+                    if filters:
+                        all_filters = dict(filters)  # Copy existing filters
+                        all_filters['_or'] = search_conditions
+                        filters = all_filters
+                    else:
+                        filters = {'_or': search_conditions}
+                
+                # Handle tags filter (exact tag matches)
+                if tags:
+                    # For now, do post-processing since exact JSON array matching is complex
+                    # TODO: Implement JSON array contains search in SQL
+                    pass
+                
+                # Get filtered results with pagination
+                prompt_data, total_count = self._store.query(
+                    filters=filters,
+                    keys_only=False,
+                    page=page,
+                    limit=limit,
+                    order_by="updated_at",
+                    order_direction="desc"
+                )
+                
+                # Convert to schema objects
+                prompts = []
+                for data in prompt_data:
+                    try:
+                        prompt = Prompt(**data)
+                        prompts.append(prompt)
+                    except Exception:
+                        continue
+                
+                # Post-process tags filter if needed
+                if tags and prompts:
+                    filtered_prompts = [
+                        p for p in prompts
+                        if any(tag in p.tags for tag in tags)
+                    ]
+                    return filtered_prompts, len(filtered_prompts)
+                
+                return prompts, total_count
             else:
-                raise Exception("Not an SQL store")
+                # Fallback to old method for non-query supporting stores
+                return self._list_fallback(page, limit, status, category_id, category_type, risk_level, search, tags, group_id, category_store)
+                
         except Exception:
             # Fallback to Redis-style approach
-            keys = self._store.keys()
-            if not keys:
-                return [], 0
+            return self._list_fallback(page, limit, status, category_id, category_type, risk_level, search, tags, group_id, category_store)
+    
+    def _list_fallback(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        status: Optional[str] = None,
+        category_id: Optional[str] = None,
+        category_type: Optional[str] = None,
+        risk_level: Optional[str] = None,
+        search: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        group_id: Optional[str] = None,
+        category_store=None,
+    ) -> tuple[List[Prompt], int]:
+        """Fallback method using the old Redis-style keys() approach."""
+        keys = self._store.keys()
+        if not keys:
+            return [], 0
 
-            try:
-                prompts = [self.get(key) for key in keys]
-                prompts = [p for p in prompts if p is not None]
-            except Exception as e:
-                return [], 0
+        try:
+            prompts = [self.get(key) for key in keys]
+            prompts = [p for p in prompts if p is not None]
+        except Exception:
+            return [], 0
 
-        # Apply filters only if SQL filtering wasn't used
-        if not sql_filtered:
-            if status:
-                prompts = [p for p in prompts if p.status == status]
-            if category_id:
-                prompts = [p for p in prompts if str(p.category_id) == str(category_id)]
-            if risk_level:
-                prompts = [p for p in prompts if p.risk_level == risk_level]
-            if group_id:
-                prompts = [p for p in prompts if str(p.group_id) == str(group_id)]
+        # Apply filters
+        if status:
+            prompts = [p for p in prompts if p.status == status]
+        if category_id:
+            prompts = [p for p in prompts if str(p.category_id) == str(category_id)]
+        if risk_level:
+            prompts = [p for p in prompts if p.risk_level == risk_level]
+        if group_id:
+            prompts = [p for p in prompts if str(p.group_id) == str(group_id)]
         if category_type and category_store:
             # Get all categories with the specified type
             matching_categories, _ = category_store.list()
@@ -249,8 +337,6 @@ class PromptStore:
                 if cat.category_type == category_type
             ]
             prompts = [p for p in prompts if str(p.category_id) in matching_category_ids]
-        if risk_level:
-            prompts = [p for p in prompts if p.risk_level == risk_level]
         if search:
             search_lower = search.lower()
             prompts = [
@@ -359,12 +445,10 @@ class PromptSetStore:
         search: Optional[str] = None,
         group_id: Optional[str] = None,  # INTERNAL USE ONLY - NOT FROM CLIENT
     ) -> tuple[List[PromptSet], int]:
-        sql_filtered = False  # Track if SQL filtering was used
-        
-        # For SQL stores, use more efficient filtered queries when possible
+        # Try efficient query() method first
         try:
-            if hasattr(self._store, 'get_filtered'):
-                # Build filters for SQL query
+            if hasattr(self._store, 'query'):
+                # Build filters for database-level filtering
                 filters = {}
                 if status:
                     filters['status'] = status
@@ -373,47 +457,78 @@ class PromptSetStore:
                 if group_id:
                     filters['group_id'] = group_id
                 
-                # Get filtered results from SQL
-                if filters:
-                    sql_filtered = True
-                    set_data = self._store.get_filtered(filters)
-                    sets = []
-                    for data in set_data:
-                        try:
-                            prompt_set = PromptSet(**data)
-                            sets.append(prompt_set)
-                        except Exception:
-                            continue
-                else:
-                    # No filters were applied, fall back to keys() approach for SQL stores
-                    keys = self._store.keys()
-                    if keys:
-                        sets = [self.get(key) for key in keys]
-                        sets = [s for s in sets if s is not None]
+                # Add search filters if provided (SQL text search with OR conditions)
+                if search:
+                    search_pattern = f"%{search}%"
+                    search_conditions = [
+                        {'name__ilike': search_pattern},
+                        {'description__ilike': search_pattern},
+                        {'tags__ilike': search_pattern}  # JSON field search for tags
+                    ]
+                    
+                    # Combine with existing filters using AND logic
+                    if filters:
+                        all_filters = dict(filters)  # Copy existing filters
+                        all_filters['_or'] = search_conditions
+                        filters = all_filters
                     else:
-                        sets = []
+                        filters = {'_or': search_conditions}
+                
+                # Get filtered results with pagination
+                set_data, total_count = self._store.query(
+                    filters=filters,
+                    keys_only=False,
+                    page=page,
+                    limit=limit,
+                    order_by="name",
+                    order_direction="asc"
+                )
+                
+                # Convert to schema objects
+                sets = []
+                for data in set_data:
+                    try:
+                        prompt_set = PromptSet(**data)
+                        sets.append(prompt_set)
+                    except Exception:
+                        continue
+                
+                return sets, total_count
             else:
-                raise Exception("Not an SQL store")
+                # Fallback to old method for non-query supporting stores
+                return self._list_fallback(page, limit, status, category_id, search, group_id)
+                
         except Exception:
             # Fallback to Redis-style approach
-            keys = self._store.keys()
-            if not keys:
-                return [], 0
+            return self._list_fallback(page, limit, status, category_id, search, group_id)
+    
+    def _list_fallback(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        status: Optional[str] = None,
+        category_id: Optional[str] = None,
+        search: Optional[str] = None,
+        group_id: Optional[str] = None,
+    ) -> tuple[List[PromptSet], int]:
+        """Fallback method using the old Redis-style keys() approach."""
+        keys = self._store.keys()
+        if not keys:
+            return [], 0
 
-            try:
-                sets = [self.get(key) for key in keys]
-                sets = [s for s in sets if s is not None]
-            except Exception as e:
-                return [], 0
+        try:
+            sets = [self.get(key) for key in keys]
+            sets = [s for s in sets if s is not None]
+        except Exception:
+            return [], 0
 
-        # Apply filters only if SQL filtering wasn't used
-        if not sql_filtered:
-            if status:
-                sets = [s for s in sets if s.status == status]
-            if category_id:
-                sets = [s for s in sets if str(s.category_id) == str(category_id)]
-            if group_id:
-                sets = [s for s in sets if str(s.group_id) == str(group_id)]
+        # Apply filters
+        if status:
+            sets = [s for s in sets if s.status == status]
+        if category_id:
+            sets = [s for s in sets if str(s.category_id) == str(category_id)]
+        if group_id:
+            sets = [s for s in sets if str(s.group_id) == str(group_id)]
         if search:
             search_lower = search.lower()
             sets = [
