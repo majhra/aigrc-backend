@@ -52,8 +52,8 @@ class PromptCategoryStore:
                     search_pattern = f"%{search}%"
                     search_conditions = [
                         {'name__ilike': search_pattern},
-                        {'description__ilike': search_pattern},
-                        {'tags__ilike': search_pattern}  # JSON field search for tags
+                        {'description__ilike': search_pattern}
+                        # Note: tags search handled in post-processing since it's JSONB
                     ]
                     
                     # Combine with existing filters using AND logic
@@ -79,6 +79,17 @@ class PromptCategoryStore:
                 categories = []
                 for data in category_data:
                     try:
+                        # If search is provided, check if it matches tags (post-processing for JSONB)
+                        if search:
+                            search_lower = search.lower()
+                            # Check if search matches in tags by converting tags to string
+                            tags_str = str(data.get('tags', [])).lower()
+                            # Skip if search doesn't match name, description, or tags
+                            if (search_lower not in data.get('name', '').lower() and 
+                                search_lower not in data.get('description', '').lower() and 
+                                search_lower not in tags_str):
+                                continue
+                        
                         category = PromptCategory(**data)
                         categories.append(category)
                     except Exception:
@@ -242,8 +253,8 @@ class PromptStore:
                     search_conditions = [
                         {'name__ilike': search_pattern},
                         {'description__ilike': search_pattern},
-                        {'content__ilike': search_pattern},
-                        {'tags__ilike': search_pattern}  # JSON field search for tags
+                        {'content__ilike': search_pattern}
+                        # Note: tags search handled in post-processing since it's JSONB
                     ]
                     
                     # Combine with existing filters using AND logic
@@ -274,6 +285,18 @@ class PromptStore:
                 prompts = []
                 for data in prompt_data:
                     try:
+                        # If search is provided, check if it matches tags (post-processing for JSONB)
+                        if search:
+                            search_lower = search.lower()
+                            # Check if search matches in tags by converting tags to string
+                            tags_str = str(data.get('tags', [])).lower()
+                            # Skip if search doesn't match name, description, content, or tags
+                            if (search_lower not in data.get('name', '').lower() and 
+                                search_lower not in data.get('description', '').lower() and 
+                                search_lower not in data.get('content', '').lower() and 
+                                search_lower not in tags_str):
+                                continue
+                        
                         prompt = Prompt(**data)
                         prompts.append(prompt)
                     except Exception:
@@ -462,8 +485,8 @@ class PromptSetStore:
                     search_pattern = f"%{search}%"
                     search_conditions = [
                         {'name__ilike': search_pattern},
-                        {'description__ilike': search_pattern},
-                        {'tags__ilike': search_pattern}  # JSON field search for tags
+                        {'description__ilike': search_pattern}
+                        # Note: tags search handled in post-processing since it's JSONB
                     ]
                     
                     # Combine with existing filters using AND logic
@@ -488,6 +511,17 @@ class PromptSetStore:
                 sets = []
                 for data in set_data:
                     try:
+                        # If search is provided, check if it matches tags (post-processing for JSONB)
+                        if search:
+                            search_lower = search.lower()
+                            # Check if search matches in tags by converting tags to string
+                            tags_str = str(data.get('tags', [])).lower()
+                            # Skip if search doesn't match name, description, or tags
+                            if (search_lower not in data.get('name', '').lower() and 
+                                search_lower not in data.get('description', '').lower() and 
+                                search_lower not in tags_str):
+                                continue
+                        
                         prompt_set = PromptSet(**data)
                         sets.append(prompt_set)
                     except Exception:

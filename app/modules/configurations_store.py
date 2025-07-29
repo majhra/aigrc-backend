@@ -55,11 +55,9 @@ class AIConfigurationStore:
         sort_by: str = "created_at",
         sort_order: str = "desc",
     ) -> tuple[List[AIEndpointConfig], int]:
-        sql_filtered = False  # Track if SQL filtering was used
-        
-        # For SQL stores, use more efficient filtered queries when possible
+        # Try using the optimized query() method for SQL stores
         try:
-            if hasattr(self._store, 'get_filtered'):
+            if hasattr(self._store, 'query'):
                 # Build filters for SQL query
                 filters = {}
                 if status:
@@ -71,103 +69,47 @@ class AIConfigurationStore:
                 if created_by:
                     filters['created_by'] = created_by
                 
-                # Get filtered results from SQL
-                if filters:
-                    sql_filtered = True
-                    config_data = self._store.get_filtered(filters)
-                    configs = []
-                    for data in config_data:
-                        try:
-                            # Clean and validate data like in get() method
-                            cleaned_data = data.copy()
-                            encrypted_fields = ['api_key_encrypted', 'bearer_token_encrypted', 'azure_client_secret_encrypted']
-                            for field in encrypted_fields:
-                                cleaned_data.pop(field, None)
-                            
-                            # Fix empty string values that should be None
-                            nullable_fields = ['last_test_status', 'last_test_error', 'avg_response_time_ms', 'last_tested_at']
-                            for field in nullable_fields:
-                                if field in cleaned_data and cleaned_data[field] == '':
-                                    cleaned_data[field] = None
-                            
-                            # Convert avg_response_time_ms to float if needed
-                            if 'avg_response_time_ms' in cleaned_data and cleaned_data['avg_response_time_ms'] is not None:
-                                try:
-                                    cleaned_data['avg_response_time_ms'] = float(cleaned_data['avg_response_time_ms'])
-                                except (ValueError, TypeError):
-                                    cleaned_data['avg_response_time_ms'] = None
-                            
-                            config = AIEndpointConfig(**cleaned_data)
+                # Handle search with OR conditions
+                if search:
+                    search_term = f"%{search}%"
+                    filters['_or'] = [
+                        {'name__ilike': search_term},
+                        {'description__ilike': search_term},
+                        {'model_name__ilike': search_term}
+                        # Note: tags search will be handled post-query since it's JSON array
+                    ]
+                
+                # Use query() method for efficient single-query retrieval
+                config_data, total_count = self._store.query(
+                    filters=filters,
+                    keys_only=False,
+                    page=page,
+                    limit=limit,
+                    order_by=sort_by,
+                    order_direction=sort_order
+                )
+                
+                # Convert to schema objects and apply post-processing
+                configs = []
+                for data in config_data:
+                    try:
+                        config = self._convert_to_schema(data)
+                        if config:
+                            # Additional tags search if needed (post-query processing)
+                            if search and not self._passes_search_filter(config, search):
+                                continue
                             configs.append(config)
-                        except Exception:
-                            continue
-                else:
-                    # No filters were applied, fall back to keys() approach for SQL stores
-                    keys = self._store.keys()
-                    if keys:
-                        configs = [self.get(key) for key in keys]
-                        configs = [c for c in configs if c is not None]
-                    else:
-                        configs = []
+                    except Exception:
+                        continue
+                
+                return configs, total_count
             else:
-                raise Exception("Not an SQL store")
+                # Fallback for stores that don't support query()
+                return self._list_fallback(page, limit, status, provider, search, group_id, created_by, sort_by, sort_order)
+                
         except Exception:
             # Fallback to Redis-style approach
-            keys = self._store.keys()
-            if not keys:
-                return [], 0
-
-            try:
-                configs = [self.get(key) for key in keys]
-                configs = [c for c in configs if c is not None]
-            except Exception as e:
-                return [], 0
-
-        # Apply filters only if SQL filtering wasn't used
-        if not sql_filtered:
-            if status:
-                configs = [c for c in configs if c.status == status]
-            if provider:
-                configs = [c for c in configs if c.provider == provider]
-            if group_id:
-                configs = [c for c in configs if str(c.group_id) == str(group_id)]
-            if created_by:
-                configs = [c for c in configs if str(c.created_by) == str(created_by)]
-        if search:
-            search_lower = search.lower()
-            configs = [
-                c for c in configs
-                if search_lower in c.name.lower()
-                or search_lower in c.description.lower()
-                or search_lower in c.model_name.lower()
-                or any(search_lower in tag.lower() for tag in c.tags)
-            ]
-
-        # Sort by the specified field and order
-        reverse_sort = sort_order.lower() == "desc"
-        
-        # Handle different sort fields
-        if sort_by == "created_at":
-            configs.sort(key=lambda x: x.created_at, reverse=reverse_sort)
-        elif sort_by == "updated_at":
-            configs.sort(key=lambda x: x.updated_at, reverse=reverse_sort)
-        elif sort_by == "name":
-            configs.sort(key=lambda x: x.name.lower(), reverse=reverse_sort)
-        elif sort_by == "provider":
-            configs.sort(key=lambda x: x.provider, reverse=reverse_sort)
-        elif sort_by == "status":
-            configs.sort(key=lambda x: x.status, reverse=reverse_sort)
-        else:
-            # Default to created_at if sort_by is not recognized
-            configs.sort(key=lambda x: x.created_at, reverse=reverse_sort)
-
-        # Calculate pagination
-        total = len(configs)
-        start = (page - 1) * limit
-        end = start + limit
-        paginated_configs = configs[start:end]
-
-        return paginated_configs, total
+            return self._list_fallback(page, limit, status, provider, search, group_id, created_by, sort_by, sort_order)
 
     def create(self, config: AIEndpointConfigCreate, user: User) -> AIEndpointConfig:
         now = datetime.now(timezone.utc)
@@ -340,6 +282,113 @@ class AIConfigurationStore:
         """Get all configurations belonging to a specific group."""
         configs, _ = self.list(group_id=group_id, page=1, limit=1000)
         return configs
+    
+    def _convert_to_schema(self, data: Dict) -> Optional[AIEndpointConfig]:
+        """Convert raw store data to AIEndpointConfig schema object."""
+        try:
+            # Clean and validate data like in get() method
+            cleaned_data = data.copy()
+            encrypted_fields = ['api_key_encrypted', 'bearer_token_encrypted', 'azure_client_secret_encrypted']
+            for field in encrypted_fields:
+                cleaned_data.pop(field, None)
+            
+            # Fix empty string values that should be None for proper Pydantic validation
+            nullable_fields = ['last_test_status', 'last_test_error', 'avg_response_time_ms', 'last_tested_at']
+            for field in nullable_fields:
+                if field in cleaned_data and cleaned_data[field] == '':
+                    cleaned_data[field] = None
+            
+            # Convert avg_response_time_ms to float if it's a valid number string
+            if 'avg_response_time_ms' in cleaned_data and cleaned_data['avg_response_time_ms'] is not None:
+                try:
+                    cleaned_data['avg_response_time_ms'] = float(cleaned_data['avg_response_time_ms'])
+                except (ValueError, TypeError):
+                    cleaned_data['avg_response_time_ms'] = None
+            
+            return AIEndpointConfig(**cleaned_data)
+        except Exception:
+            return None
+    
+    def _passes_search_filter(self, config: AIEndpointConfig, search: str) -> bool:
+        """Check if config passes search filter (for tags and other complex searches)."""
+        search_lower = search.lower()
+        
+        # Check tags (JSON array search not handled in SQL)
+        if any(search_lower in tag.lower() for tag in config.tags):
+            return True
+            
+        # If search was already handled in SQL query, return False to exclude
+        # (because SQL would have matched name, description, model_name already)
+        return False
+    
+    def _list_fallback(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        status: Optional[str] = None,
+        provider: Optional[str] = None,
+        search: Optional[str] = None,
+        group_id: Optional[str] = None,
+        created_by: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> tuple[List[AIEndpointConfig], int]:
+        """Fallback implementation for stores that don't support query() method."""
+        # Get all keys and convert to configs
+        keys = self._store.keys()
+        if not keys:
+            return [], 0
+
+        try:
+            configs = [self.get(key) for key in keys]
+            configs = [c for c in configs if c is not None]
+        except Exception:
+            return [], 0
+
+        # Apply filters
+        if status:
+            configs = [c for c in configs if c.status == status]
+        if provider:
+            configs = [c for c in configs if c.provider == provider]
+        if group_id:
+            configs = [c for c in configs if str(c.group_id) == str(group_id)]
+        if created_by:
+            configs = [c for c in configs if str(c.created_by) == str(created_by)]
+        if search:
+            search_lower = search.lower()
+            configs = [
+                c for c in configs
+                if search_lower in c.name.lower()
+                or search_lower in c.description.lower()
+                or search_lower in c.model_name.lower()
+                or any(search_lower in tag.lower() for tag in c.tags)
+            ]
+
+        # Sort by the specified field and order
+        reverse_sort = sort_order.lower() == "desc"
+        
+        # Handle different sort fields
+        if sort_by == "created_at":
+            configs.sort(key=lambda x: x.created_at, reverse=reverse_sort)
+        elif sort_by == "updated_at":
+            configs.sort(key=lambda x: x.updated_at, reverse=reverse_sort)
+        elif sort_by == "name":
+            configs.sort(key=lambda x: x.name.lower(), reverse=reverse_sort)
+        elif sort_by == "provider":
+            configs.sort(key=lambda x: x.provider, reverse=reverse_sort)
+        elif sort_by == "status":
+            configs.sort(key=lambda x: x.status, reverse=reverse_sort)
+        else:
+            # Default to created_at if sort_by is not recognized
+            configs.sort(key=lambda x: x.created_at, reverse=reverse_sort)
+
+        # Calculate pagination
+        total = len(configs)
+        start = (page - 1) * limit
+        end = start + limit
+        paginated_configs = configs[start:end]
+
+        return paginated_configs, total
 
 
 class AIProviderService:

@@ -19,40 +19,37 @@ class GroupStore:
 
     def get_by_name(self, name: str) -> Optional[Group]:
         """Get a group by name."""
-        # For SQL stores, use more efficient filtered queries when possible
+        # Try using the optimized query() method for SQL stores
         try:
-            if hasattr(self._store, 'get_filtered'):
-                # Use SQL filtering by name
-                group_data = self._store.get_filtered({'name': name})
-                if group_data:
+            if hasattr(self._store, 'query'):
+                # First try exact case-sensitive match
+                groups = self._store.query(
+                    filters={'name': name},
+                    keys_only=False
+                )
+                if groups:
                     try:
-                        return Group(**group_data[0])
+                        return Group(**groups[0])
                     except Exception:
                         pass
                 
-                # If exact match failed, fall back to case-insensitive search
-                all_data = self._store.get_filtered({})
-                for data in all_data:
+                # If exact match failed, fall back to case-insensitive search with ILIKE
+                groups = self._store.query(
+                    filters={'name__ilike': name},
+                    keys_only=False
+                )
+                if groups:
                     try:
-                        group = Group(**data)
-                        if group.name.lower() == name.lower():
-                            return group
+                        return Group(**groups[0])
                     except Exception:
-                        continue
+                        pass
                 return None
             else:
-                raise Exception("Not an SQL store")
+                # Fallback for stores that don't support query()
+                return self._get_by_name_fallback(name)
         except Exception:
             # Fallback to Redis-style approach
-            keys = self._store.keys()
-            if not keys:
-                return None
-
-            for key in keys:
-                group = self.get(key)
-                if group and group.name.lower() == name.lower():
-                    return group
-            return None
+            return self._get_by_name_fallback(name)
 
     def list(
         self,
@@ -62,71 +59,49 @@ class GroupStore:
         search: Optional[str] = None,
     ) -> tuple[List[Group], int]:
         """List groups with pagination and filtering."""
-        sql_filtered = False  # Track if SQL filtering was used
-        
-        # For SQL stores, use more efficient filtered queries when possible
+        # Try using the optimized query() method for SQL stores
         try:
-            if hasattr(self._store, 'get_filtered'):
+            if hasattr(self._store, 'query'):
                 # Build filters for SQL query
                 filters = {}
                 if status:
                     filters['status'] = status
                 
-                # Get filtered results from SQL
-                if filters:
-                    sql_filtered = True
-                    group_data = self._store.get_filtered(filters)
-                    groups = []
-                    for data in group_data:
-                        try:
-                            group = Group(**data)
-                            groups.append(group)
-                        except Exception:
-                            continue
-                else:
-                    # No filters were applied, fall back to keys() approach for SQL stores
-                    keys = self._store.keys()
-                    if keys:
-                        groups = [self.get(key) for key in keys]
-                        groups = [g for g in groups if g is not None]
-                    else:
-                        groups = []
+                # Handle search with OR conditions
+                if search:
+                    search_term = f"%{search}%"
+                    filters['_or'] = [
+                        {'name__ilike': search_term},
+                        {'description__ilike': search_term}
+                    ]
+                
+                # Use query() method for efficient single-query retrieval
+                group_data, total_count = self._store.query(
+                    filters=filters,
+                    keys_only=False,
+                    page=page,
+                    limit=limit,
+                    order_by="name",
+                    order_direction="asc"
+                )
+                
+                # Convert to schema objects
+                groups = []
+                for data in group_data:
+                    try:
+                        group = Group(**data)
+                        groups.append(group)
+                    except Exception:
+                        continue
+                
+                return groups, total_count
             else:
-                raise Exception("Not an SQL store")
+                # Fallback for stores that don't support query()
+                return self._list_fallback(page, limit, status, search)
+                
         except Exception:
             # Fallback to Redis-style approach
-            keys = self._store.keys()
-
-            if not keys:
-                return [], 0
-
-            # Get all groups
-            try:
-                groups = [self.get(key) for key in keys]
-                groups = [g for g in groups if g is not None]  # Filter out None values
-            except Exception as e:
-                print(f"error: {e}")
-                return [], 0
-
-        # Apply filters only if SQL filtering wasn't used
-        if not sql_filtered:
-            if status:
-                groups = [g for g in groups if g.status == status]
-        if search:
-            search_lower = search.lower()
-            groups = [
-                g for g in groups
-                if search_lower in g.name.lower()
-                or (g.description and search_lower in g.description.lower())
-            ]
-
-        # Calculate pagination
-        total = len(groups)
-        start = (page - 1) * limit
-        end = start + limit
-        paginated_groups = groups[start:end]
-
-        return paginated_groups, total
+            return self._list_fallback(page, limit, status, search)
 
     def create(self, group_data: GroupCreate, created_by: str) -> Group:
         """Create a new group."""
@@ -173,4 +148,58 @@ class GroupStore:
 
     def exists(self, group_id: str) -> bool:
         """Check if a group exists."""
-        return self.get(group_id) is not None 
+        return self.get(group_id) is not None
+    
+    def _get_by_name_fallback(self, name: str) -> Optional[Group]:
+        """Fallback implementation for stores that don't support query() method."""
+        keys = self._store.keys()
+        if not keys:
+            return None
+
+        for key in keys:
+            group = self.get(key)
+            if group and group.name.lower() == name.lower():
+                return group
+        return None
+    
+    def _list_fallback(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        status: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> tuple[List[Group], int]:
+        """Fallback implementation for stores that don't support query() method."""
+        keys = self._store.keys()
+
+        if not keys:
+            return [], 0
+
+        # Get all groups
+        try:
+            groups = [self.get(key) for key in keys]
+            groups = [g for g in groups if g is not None]  # Filter out None values
+        except Exception:
+            return [], 0
+
+        # Apply filters
+        if status:
+            groups = [g for g in groups if g.status == status]
+        if search:
+            search_lower = search.lower()
+            groups = [
+                g for g in groups
+                if search_lower in g.name.lower()
+                or (g.description and search_lower in g.description.lower())
+            ]
+
+        # Sort by name (ascending)
+        groups.sort(key=lambda x: x.name.lower())
+
+        # Calculate pagination
+        total = len(groups)
+        start = (page - 1) * limit
+        end = start + limit
+        paginated_groups = groups[start:end]
+
+        return paginated_groups, total

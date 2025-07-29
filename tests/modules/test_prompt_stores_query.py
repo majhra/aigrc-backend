@@ -138,8 +138,8 @@ class TestPromptStoresQueryMethods(unittest.TestCase):
         expected_filters = {
             '_or': [
                 {'name__ilike': '%searchable%'},
-                {'description__ilike': '%searchable%'},
-                {'tags__ilike': '%searchable%'}
+                {'description__ilike': '%searchable%'}
+                # Note: tags search handled in post-processing since it's JSONB
             ]
         }
         
@@ -225,13 +225,13 @@ class TestPromptStoresQueryMethods(unittest.TestCase):
         # Call list with search
         prompts, total = prompt_store.list(search="searchable")
         
-        # Verify query was called with OR search conditions
+        # Verify query was called with OR search conditions (tags handled in post-processing)
         expected_filters = {
             '_or': [
                 {'name__ilike': '%searchable%'},
                 {'description__ilike': '%searchable%'},
-                {'content__ilike': '%searchable%'},
-                {'tags__ilike': '%searchable%'}
+                {'content__ilike': '%searchable%'}
+                # Note: tags search handled in post-processing since it's JSONB
             ]
         }
         
@@ -424,8 +424,8 @@ class TestPromptStoresQueryMethods(unittest.TestCase):
         expected_filters = {
             '_or': [
                 {'name__ilike': '%searchable%'},
-                {'description__ilike': '%searchable%'},
-                {'tags__ilike': '%searchable%'}
+                {'description__ilike': '%searchable%'}
+                # Note: tags search handled in post-processing since it's JSONB
             ]
         }
         
@@ -525,12 +525,12 @@ class TestPromptStoresQueryMethods(unittest.TestCase):
                 expected_filters = case["filters"].copy()
                 expected_filters['_or'] = [
                     {'name__ilike': '%searchable%'},
-                    {'description__ilike': '%searchable%'},
-                    {'tags__ilike': '%searchable%'}
+                    {'description__ilike': '%searchable%'}
+                    # Note: tags search now handled in post-processing for all stores
                 ]
                 if hasattr(case["store"], '__class__') and case["store"].__class__.__name__ == 'PromptStore':
                     # PromptStore has additional content search
-                    expected_filters['_or'].insert(2, {'content__ilike': '%searchable%'})
+                    expected_filters['_or'].append({'content__ilike': '%searchable%'})
                 
                 self.mock_store.query.assert_called_once()
                 call_args = self.mock_store.query.call_args

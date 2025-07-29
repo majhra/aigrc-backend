@@ -15,6 +15,9 @@ class TestGroupStore(unittest.TestCase):
         self.mock_store = MagicMock(spec=LocalStore)
         self.group_store = GroupStore(self.mock_store)
         
+        # Configure mock query method to return expected format by default
+        self.mock_store.query.return_value = ([], 0)
+        
         # Create test group data with timestamp set to 1 second before test runs
         test_timestamp = datetime.now(timezone.utc) - timedelta(seconds=1)
         
@@ -55,19 +58,25 @@ class TestGroupStore(unittest.TestCase):
 
     def test_get_by_name_success(self):
         """Test successful group retrieval by name."""
-        # Mock the store to return keys and group data
-        self.mock_store.keys.return_value = [self.test_group_id]
-        self.mock_store.get.return_value = self.test_group.model_dump()
+        # Mock the query method to return the group on exact match
+        self.mock_store.query.return_value = [self.test_group.model_dump()]
         
         result = self.group_store.get_by_name(self.test_group.name)
         
         # Verify the result
         self.assertIsNotNone(result)
         self.assertEqual(result.name, self.test_group.name)
+        
+        # Verify query was called with exact match filter
+        self.mock_store.query.assert_called_once_with(
+            filters={'name': self.test_group.name},
+            keys_only=False
+        )
 
     def test_get_by_name_not_found(self):
         """Test group retrieval by name when group doesn't exist."""
-        self.mock_store.keys.return_value = []
+        # Mock the query method to return empty results for both exact and case-insensitive searches
+        self.mock_store.query.side_effect = [[], []]  # Empty for both calls
         
         result = self.group_store.get_by_name("Non-existent Group")
         
@@ -75,22 +84,33 @@ class TestGroupStore(unittest.TestCase):
 
     def test_get_by_name_case_insensitive(self):
         """Test that group retrieval by name is case insensitive."""
-        # Mock the store to return keys and group data
-        self.mock_store.keys.return_value = [self.test_group_id]
-        self.mock_store.get.return_value = self.test_group.model_dump()
+        # Mock the query method to return empty on exact match, then the group on case-insensitive search
+        self.mock_store.query.side_effect = [
+            [],  # First call (exact match) returns empty
+            [self.test_group.model_dump()]  # Second call (case-insensitive) returns the group
+        ]
         
         result = self.group_store.get_by_name(self.test_group.name.upper())
         
         # Should find the group regardless of case
         self.assertIsNotNone(result)
         self.assertEqual(result.name, self.test_group.name)
+        
+        # Verify both queries were made
+        self.assertEqual(self.mock_store.query.call_count, 2)
+        
+        # First call should be exact match
+        first_call = self.mock_store.query.call_args_list[0]
+        self.assertEqual(first_call[1]['filters'], {'name': self.test_group.name.upper()})
+        
+        # Second call should be case-insensitive
+        second_call = self.mock_store.query.call_args_list[1] 
+        self.assertEqual(second_call[1]['filters'], {'name__ilike': self.test_group.name.upper()})
 
     def test_list_success(self):
         """Test successful group listing."""
-        # Mock the store to return keys and group data
-        test_keys = [self.test_group_id]
-        self.mock_store.keys.return_value = test_keys
-        self.mock_store.get.return_value = self.test_group.model_dump()
+        # Mock the query method to return group data
+        self.mock_store.query.return_value = ([self.test_group.model_dump()], 1)
         
         groups, total = self.group_store.list(page=1, limit=10)
         
@@ -98,36 +118,63 @@ class TestGroupStore(unittest.TestCase):
         self.assertEqual(len(groups), 1)
         self.assertEqual(total, 1)
         self.assertEqual(groups[0].name, self.test_group.name)
+        
+        # Verify query was called correctly
+        self.mock_store.query.assert_called_once_with(
+            filters={},
+            keys_only=False,
+            page=1,
+            limit=10,
+            order_by="name",
+            order_direction="asc"
+        )
 
     def test_list_with_status_filter(self):
         """Test group listing with status filter."""
-        # Mock the store to return keys and group data
-        test_keys = [self.test_group_id]
-        self.mock_store.keys.return_value = test_keys
-        self.mock_store.get.return_value = self.test_group.model_dump()
+        # Mock the query method to return group data
+        self.mock_store.query.return_value = ([self.test_group.model_dump()], 1)
         
         groups, total = self.group_store.list(status="ACTIVE", page=1, limit=10)
         
         # Should return groups with the specified status
         self.assertEqual(len(groups), 1)
         self.assertEqual(total, 1)
+        
+        # Verify query was called with status filter
+        self.mock_store.query.assert_called_once_with(
+            filters={'status': 'ACTIVE'},
+            keys_only=False,
+            page=1,
+            limit=10,
+            order_by="name",
+            order_direction="asc"
+        )
 
     def test_list_with_search(self):
         """Test group listing with search filter."""
-        # Mock the store to return keys and group data
-        test_keys = [self.test_group_id]
-        self.mock_store.keys.return_value = test_keys
-        self.mock_store.get.return_value = self.test_group.model_dump()
+        # Mock the query method to return group data
+        self.mock_store.query.return_value = ([self.test_group.model_dump()], 1)
         
         groups, total = self.group_store.list(search="test", page=1, limit=10)
         
         # Should return groups matching the search
         self.assertEqual(len(groups), 1)
         self.assertEqual(total, 1)
+        
+        # Verify query was called with search filter
+        self.mock_store.query.assert_called_once_with(
+            filters={'_or': [{'name__ilike': '%test%'}, {'description__ilike': '%test%'}]},
+            keys_only=False,
+            page=1,
+            limit=10,
+            order_by="name",
+            order_direction="asc"
+        )
 
     def test_list_empty(self):
         """Test group listing when no groups exist."""
-        self.mock_store.keys.return_value = []
+        # Mock the query method to return empty results (already set in setUp)
+        self.mock_store.query.return_value = ([], 0)
         
         groups, total = self.group_store.list(page=1, limit=10)
         
@@ -136,16 +183,25 @@ class TestGroupStore(unittest.TestCase):
 
     def test_list_pagination(self):
         """Test group listing with pagination."""
-        # Mock the store to return multiple keys
-        test_keys = [f"group{i}" for i in range(5)]
-        self.mock_store.keys.return_value = test_keys
-        self.mock_store.get.return_value = self.test_group.model_dump()
+        # Mock the query method to return paginated results (3 groups out of 5 total)
+        group_data = [self.test_group.model_dump() for _ in range(3)]
+        self.mock_store.query.return_value = (group_data, 5)
         
         groups, total = self.group_store.list(page=1, limit=3)
         
         # Should return paginated results
         self.assertEqual(len(groups), 3)
         self.assertEqual(total, 5)
+        
+        # Verify query was called with pagination
+        self.mock_store.query.assert_called_once_with(
+            filters={},
+            keys_only=False,
+            page=1,
+            limit=3,
+            order_by="name",
+            order_direction="asc"
+        )
 
     def test_create_success(self):
         """Test successful group creation."""

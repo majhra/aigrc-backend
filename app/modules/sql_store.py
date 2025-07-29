@@ -184,7 +184,8 @@ class SQLStore(StoreProtocol):
                                     if hasattr(self.table.c, field_name):
                                         column = getattr(self.table.c, field_name)
                                         if operator == 'ilike':
-                                            or_conditions.append(column.ilike(or_value))
+                                            # Use LOWER() for case-insensitive search instead of ILIKE
+                                            or_conditions.append(func.lower(column).like(func.lower(or_value)))
                                         elif operator == 'like':
                                             or_conditions.append(column.like(or_value))
                                         elif operator == 'in':
@@ -202,7 +203,8 @@ class SQLStore(StoreProtocol):
                         if hasattr(self.table.c, field_name):
                             column = getattr(self.table.c, field_name)
                             if operator == 'ilike':
-                                conditions.append(column.ilike(value))
+                                # Use LOWER() for case-insensitive search instead of ILIKE
+                                conditions.append(func.lower(column).like(func.lower(value)))
                             elif operator == 'like':
                                 conditions.append(column.like(value))
                             elif operator == 'in':
@@ -242,7 +244,8 @@ class SQLStore(StoreProtocol):
                                         if hasattr(self.table.c, field_name):
                                             column = getattr(self.table.c, field_name)
                                             if operator == 'ilike':
-                                                or_conditions.append(column.ilike(or_value))
+                                                # Use LOWER() for case-insensitive search instead of ILIKE
+                                                or_conditions.append(func.lower(column).like(func.lower(or_value)))
                                             elif operator == 'like':
                                                 or_conditions.append(column.like(or_value))
                                             elif operator == 'in':
@@ -260,7 +263,8 @@ class SQLStore(StoreProtocol):
                             if hasattr(self.table.c, field_name):
                                 column = getattr(self.table.c, field_name)
                                 if operator == 'ilike':
-                                    conditions.append(column.ilike(value))
+                                    # Use LOWER() for case-insensitive search instead of ILIKE
+                                    conditions.append(func.lower(column).like(func.lower(value)))
                                 elif operator == 'like':
                                     conditions.append(column.like(value))
                                 elif operator == 'in':

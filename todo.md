@@ -27,5 +27,5 @@
 
 [ ] - investigate handling other things than llm results - marketing images, emails etc etc
 [ ] - change system to handle async database queries to better handle load
-[ ] - database config and password needs to be in .env. 
+[x] - database config and password needs to be in .env. 
 [ ] - if not group_filter: group_filter = "default" # might filter out all groups for admin. we want admin to see all groups so leave it as None or blank.
