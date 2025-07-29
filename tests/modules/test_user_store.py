@@ -29,6 +29,9 @@ class TestUserStore(unittest.TestCase):
         
         self.test_group_id = "test_group"
         self.test_user_id = str(self.test_user.id)
+        
+        # Configure mock query method to return expected format by default
+        self.mock_store.query.return_value = ([], 0)
 
     def test_get_user_key(self):
         """Test that user keys are generated correctly."""
@@ -98,16 +101,16 @@ class TestUserStore(unittest.TestCase):
 
     def test_get_by_id_only_success(self):
         """Test successful user retrieval by ID only."""
-        # Mock the store to return keys and user data
-        test_key = f"{self.test_group_id}:{self.test_user_id}"
-        self.mock_store.keys.return_value = [test_key]
-        self.mock_store.get.return_value = self.test_user.model_dump()
+        # Configure mock query to return the user
+        self.mock_store.query.return_value = [self.test_user.model_dump()]
         
         result = self.user_store.get_by_id_only(self.test_user_id)
         
-        # Verify the store was called correctly
-        self.mock_store.keys.assert_called_once()
-        self.mock_store.get.assert_called_once_with(test_key)
+        # Verify the query was called correctly
+        self.mock_store.query.assert_called_once_with(
+            filters={"id": self.test_user_id},
+            keys_only=False
+        )
         
         # Verify the result
         self.assertIsNotNone(result)
@@ -115,7 +118,8 @@ class TestUserStore(unittest.TestCase):
 
     def test_get_by_id_only_not_found(self):
         """Test user retrieval by ID when user doesn't exist."""
-        self.mock_store.keys.return_value = []
+        # Configure mock query to return empty list
+        self.mock_store.query.return_value = []
         
         result = self.user_store.get_by_id_only(self.test_user_id)
         
@@ -123,10 +127,8 @@ class TestUserStore(unittest.TestCase):
 
     def test_get_by_id_only_invalid_keys(self):
         """Test user retrieval by ID with invalid keys in store."""
-        # Mock the store to return some invalid keys
-        invalid_keys = ["invalid_key", "another:invalid:key", f"{self.test_group_id}:{self.test_user_id}"]
-        self.mock_store.keys.return_value = invalid_keys
-        self.mock_store.get.return_value = self.test_user.model_dump()
+        # Configure mock query to return the user (query method handles filtering)
+        self.mock_store.query.return_value = [self.test_user.model_dump()]
         
         result = self.user_store.get_by_id_only(self.test_user_id)
         
@@ -252,10 +254,8 @@ class TestUserStore(unittest.TestCase):
 
     def test_list_users_success(self):
         """Test successful user listing."""
-        # Mock the store to return keys and user data
-        test_keys = [f"{self.test_group_id}:{self.test_user_id}"]
-        self.mock_store.keys.return_value = test_keys
-        self.mock_store.get.return_value = self.test_user.model_dump()
+        # Configure mock query to return user data
+        self.mock_store.query.return_value = ([self.test_user.model_dump()], 1)
         
         users, total = self.user_store.list(page=1, limit=10)
         
@@ -266,14 +266,9 @@ class TestUserStore(unittest.TestCase):
 
     def test_list_users_with_group_filter(self):
         """Test user listing with group filter."""
-        # Mock the store to return keys for different groups
-        test_keys = [
-            f"{self.test_group_id}:{self.test_user_id}",
-            "other_group:other_user",
-            f"{self.test_group_id}:another_user"
-        ]
-        self.mock_store.keys.return_value = test_keys
-        self.mock_store.get.return_value = self.test_user.model_dump()
+        # Configure mock query to return 2 users from the test group
+        user_data = self.test_user.model_dump()
+        self.mock_store.query.return_value = ([user_data, user_data], 2)
         
         users, total = self.user_store.list(group_id=self.test_group_id, page=1, limit=10)
         
@@ -283,10 +278,8 @@ class TestUserStore(unittest.TestCase):
 
     def test_list_users_with_search(self):
         """Test user listing with search filter."""
-        # Mock the store to return keys and user data
-        test_keys = [f"{self.test_group_id}:{self.test_user_id}"]
-        self.mock_store.keys.return_value = test_keys
-        self.mock_store.get.return_value = self.test_user.model_dump()
+        # Configure mock query to return user matching search
+        self.mock_store.query.return_value = ([self.test_user.model_dump()], 1)
         
         users, total = self.user_store.list(search="test", page=1, limit=10)
         
@@ -305,10 +298,9 @@ class TestUserStore(unittest.TestCase):
 
     def test_list_users_pagination(self):
         """Test user listing with pagination."""
-        # Mock the store to return multiple keys
-        test_keys = [f"{self.test_group_id}:user{i}" for i in range(5)]
-        self.mock_store.keys.return_value = test_keys
-        self.mock_store.get.return_value = self.test_user.model_dump()
+        # Configure mock query to return paginated results (3 users out of 5 total)
+        user_data = self.test_user.model_dump()
+        self.mock_store.query.return_value = ([user_data, user_data, user_data], 5)
         
         users, total = self.user_store.list(page=1, limit=3)
         

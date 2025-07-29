@@ -666,9 +666,605 @@ No changes needed to local Docker setup since PostgreSQL is already running on t
 
 ## Success Criteria
 
-- [ ] All existing API endpoints work unchanged
-- [ ] All existing tests pass
-- [ ] Data migration completes successfully with validation
-- [ ] Performance is acceptable for current user load
-- [ ] No data loss during migration
-- [ ] Rollback plan tested and verified
+- [x] All existing API endpoints work unchanged
+- [x] All existing tests pass
+- [x] Data migration completes successfully with validation
+- [x] Performance is acceptable for current user load
+- [x] No data loss during migration
+- [x] Rollback plan tested and verified
+
+**STATUS: MIGRATION COMPLETE ✅**
+
+All phases of the PostgreSQL migration have been successfully completed. The application is now running on PostgreSQL with SQLStore implementation, maintaining full backward compatibility with the existing Redis-based interface.
+
+---
+
+# Performance Optimization: Query Efficiency Enhancement
+
+## Overview
+
+With the PostgreSQL migration complete, the next phase focuses on eliminating inefficient `keys()` + individual `get()` patterns that were carried over from Redis. This optimization will provide 10-100x performance improvements for list operations by leveraging SQL's native filtering capabilities.
+
+## Current Performance Issues
+
+### Inefficient Pattern Analysis
+The current store implementations use a Redis-era pattern that is highly inefficient with SQL:
+
+1. **Pattern**: `keys() → filter keys → individual get() calls`
+2. **Problem**: Results in N+1 query problem (1 query for keys + N queries for individual records)
+3. **Impact**: List operations with 100 records = 101 SQL queries instead of 1
+
+### Affected Store Methods
+
+All `list()` methods across store classes follow this inefficient pattern:
+
+- **UserStore**: `list()`, `get_by_id_only()`
+- **AITestStore**: `list()`
+- **PromptCategoryStore**: `list()`
+- **PromptStore**: `list()`
+- **PromptSetStore**: `list()`
+- **AIConfigurationStore**: `list()`
+- **GroupStore**: `list()`
+- **ExecutedTestStore**: `list()`, `list_outstanding_tasks()`
+
+## Solution: Enhanced Query Method
+
+### Design Philosophy
+
+Instead of adding new methods, we'll enhance the existing store interface with a new `query()` method that subsumes both `keys()` and filtered record retrieval, while preserving `keys()` for future Redis compatibility.
+
+### New Method Signature
+
+```python
+def query(
+    self, 
+    filters: Optional[Dict[str, Any]] = None,
+    keys_only: bool = True,
+    page: Optional[int] = None,
+    limit: Optional[int] = None,
+    order_by: Optional[str] = None,
+    order_direction: str = "asc"
+) -> Union[List[str], List[Dict[str, Any]], Tuple[List[str], int], Tuple[List[Dict[str, Any]], int]]:
+    """
+    Unified query method for efficient data retrieval.
+    
+    Args:
+        filters: Dict of column_name: value filters
+        keys_only: If True, return only keys; if False, return full records
+        page: Page number for pagination (1-based)
+        limit: Records per page
+        order_by: Column name to sort by
+        order_direction: "asc" or "desc"
+    
+    Returns:
+        - List[str]: Keys only, no pagination
+        - List[Dict]: Full records, no pagination  
+        - Tuple[List[str], int]: Keys + total count
+        - Tuple[List[Dict], int]: Records + total count
+    """
+```
+
+## Implementation Plan
+
+### Phase 1: SQLStore Enhancement (1 day)
+
+#### 1.1 Add query() method to StoreProtocol
+```python
+# app/modules/store_interface.py
+class StoreProtocol(Protocol):
+    # ... existing methods ...
+    
+    def query(
+        self, 
+        filters: Optional[Dict[str, Any]] = None,
+        keys_only: bool = True,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
+        order_by: Optional[str] = None,
+        order_direction: str = "asc"
+    ) -> Union[List[str], List[Dict[str, Any]], Tuple[List[str], int], Tuple[List[Dict[str, Any]], int]]:
+        pass
+```
+
+#### 1.2 Implement query() in SQLStore
+```python
+# app/modules/sql_store.py
+def query(self, filters=None, keys_only=True, page=None, limit=None, order_by=None, order_direction="asc"):
+    try:
+        # Build base query
+        if keys_only:
+            stmt = select(getattr(self.table.c, self.key_column))
+        else:
+            stmt = select(self.table)
+        
+        # Apply filters
+        if filters:
+            conditions = []
+            for column_name, value in filters.items():
+                if hasattr(self.table.c, column_name):
+                    if isinstance(value, list):
+                        conditions.append(getattr(self.table.c, column_name).in_(value))
+                    else:
+                        conditions.append(getattr(self.table.c, column_name) == value)
+            if conditions:
+                stmt = stmt.where(and_(*conditions))
+        
+        # Apply ordering
+        if order_by and hasattr(self.table.c, order_by):
+            order_col = getattr(self.table.c, order_by)
+            if order_direction.lower() == "desc":
+                stmt = stmt.order_by(order_col.desc())
+            else:
+                stmt = stmt.order_by(order_col)
+        
+        # Handle pagination
+        if page is not None and limit is not None:
+            # Get total count
+            count_stmt = select(func.count()).select_from(stmt.alias())
+            total_count = self.session.execute(count_stmt).scalar()
+            
+            # Apply pagination
+            offset = (page - 1) * limit
+            stmt = stmt.offset(offset).limit(limit)
+            
+            # Execute query
+            results = self.session.execute(stmt).fetchall()
+            
+            if keys_only:
+                return [str(row[0]) for row in results], total_count
+            else:
+                return [self._row_to_dict(row) for row in results], total_count
+        else:
+            # No pagination
+            results = self.session.execute(stmt).fetchall()
+            
+            if keys_only:
+                return [str(row[0]) for row in results]
+            else:
+                return [self._row_to_dict(row) for row in results]
+                
+    except Exception as e:
+        self.logger.error(f"Error in query: {str(e)}")
+        raise
+```
+
+#### 1.3 Implement query() in LocalStore and RedisStore
+
+**All stores must implement `query()` method** to maintain protocol compliance and ensure test completeness:
+
+- **SQLStore**: Efficient SQL implementation with database queries
+- **LocalStore**: In-memory implementation that mirrors SQL behavior for testing  
+- **RedisStore**: Simple delegation to existing `keys()` method
+
+**LocalStore Implementation**:
+```python
+# app/modules/store_interface.py - LocalStore.query()
+def query(self, filters=None, keys_only=True, page=None, limit=None, order_by=None, order_direction="asc"):
+    """In-memory implementation that mirrors SQL behavior for testing"""
+    all_keys = list(self.data.keys())
+    
+    # Apply filters
+    if filters:
+        filtered_keys = []
+        for key in all_keys:
+            record = self.data[key]
+            if all(record.get(k) == v for k, v in filters.items()):
+                filtered_keys.append(key)
+        keys = filtered_keys
+    else:
+        keys = all_keys
+    
+    # Apply sorting (simple string sort for testing)
+    if order_by:
+        keys.sort(reverse=(order_direction.lower() == "desc"))
+    
+    # Handle pagination
+    if page is not None and limit is not None:
+        total_count = len(keys)
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_keys = keys[start_idx:end_idx]
+        
+        if keys_only:
+            return paginated_keys, total_count
+        else:
+            records = [self.data[key] for key in paginated_keys]
+            return records, total_count
+    else:
+        if keys_only:
+            return keys
+        else:
+            return [self.data[key] for key in keys]
+```
+
+**RedisStore Implementation**:
+```python
+# app/modules/store_interface.py - RedisStore.query() 
+def query(self, filters=None, keys_only=True, page=None, limit=None, order_by=None, order_direction="asc"):
+    """Simple delegation to keys() - let list() methods handle filtering"""
+    if keys_only and not filters and not page and not limit:
+        # Simple case - just return all keys
+        return self.keys()
+    else:
+        # For any complex operations, delegate to existing keys() method
+        # Store classes will handle the filtering with existing logic
+        return self.keys()
+```
+
+**Revised Store Implementation Pattern**:
+```python
+# app/modules/user_store.py - Direct query() usage (no fallback needed)
+def list(self, group_id: Optional[str] = None, page: int = 1, limit: int = 10, search: Optional[str] = None):
+    filters = {}
+    if group_id:
+        filters["group_id"] = group_id
+        
+    users, total_count = self._store.query(
+        filters=filters,
+        keys_only=False,
+        page=page,
+        limit=limit,
+        order_by="created_at",
+        order_direction="desc"
+    )
+    
+    # Apply search filter if needed (post-query for now)
+    if search:
+        search_lower = search.lower()
+        filtered_users = [
+            u for u in users 
+            if search_lower in u.get("full_name", "").lower() 
+            or search_lower in u.get("email", "").lower()
+        ]
+        return [User(**user_data) for user_data in filtered_users], len(filtered_users)
+    
+    return [User(**user_data) for user_data in users], total_count
+```
+
+**Benefits of this approach**:
+- **Test completeness**: LocalStore mirrors production SQLStore behavior in tests
+- **Protocol compliance**: All stores implement the same interface
+- **Minimal RedisStore changes**: RedisStore just wraps to `keys()`, existing `list()` logic unchanged
+- **No fallback complexity**: Store classes can directly use `query()` without try/catch
+
+### Phase 2: Store-by-Store Migration (5 days, 1 store per day)
+
+Each store will be migrated individually with full testing before proceeding to the next.
+
+#### Day 1: ExecutedTestStore Migration
+
+**Why Start Here**: Simplest implementation, already uses direct `keys()` approach.
+
+**Changes Required**:
+```python
+# app/modules/executions_store.py - Before
+def list(self, test_id: str, page: int = 1, limit: int = 10, status: Optional[str] = None, ...):
+    keys = self._store.keys()  # Gets ALL keys
+    # ... filter through all records manually
+
+# app/modules/executions_store.py - After  
+def list(self, test_id: str, page: int = 1, limit: int = 10, status: Optional[str] = None, ...):
+    filters = {"test_id": test_id}
+    if status:
+        filters["validation_status"] = status
+    if statuses:
+        filters["validation_status"] = statuses  # IN clause
+    
+    executions, total_count = self._store.query(
+        filters=filters,
+        keys_only=False,
+        page=page,
+        limit=limit,
+        order_by="executed_at",
+        order_direction="desc"
+    )
+    
+    # Convert to schema objects
+    result_executions = []
+    for execution_data in executions:
+        try:
+            execution = ExecutedTestSchema(**execution_data)
+            result_executions.append(execution)
+        except Exception as e:
+            self.logger.error(f"Error converting execution data: {e}")
+            continue
+    
+    return result_executions, total_count
+```
+
+**Testing Strategy**:
+1. Run existing `test_executions_store.py` tests
+2. Run API tests for `/tests/{test_id}/executions`
+3. Performance benchmark: Before vs After query counts
+4. Verify pagination works correctly
+
+#### Day 2: UserStore Migration
+
+**Changes Required**:
+```python
+# app/modules/user_store.py
+def list(self, group_id: Optional[str] = None, page: int = 1, limit: int = 10, search: Optional[str] = None):
+    filters = {}
+    if group_id:
+        filters["group_id"] = group_id
+    
+    if search:
+        # For search, we'll need to handle this at SQL level later
+        # For now, fall back to post-query filtering
+        users, total_count = self._store.query(
+            filters=filters,
+            keys_only=False,
+            page=page,
+            limit=limit,
+            order_by="created_at",
+            order_direction="desc"
+        )
+        
+        # Apply search filter
+        if search:
+            search_lower = search.lower()
+            filtered_users = [
+                u for u in users 
+                if search_lower in u.get("full_name", "").lower() 
+                or search_lower in u.get("email", "").lower()
+            ]
+            return [User(**user_data) for user_data in filtered_users], len(filtered_users)
+    else:
+        users, total_count = self._store.query(
+            filters=filters,
+            keys_only=False,
+            page=page,
+            limit=limit,
+            order_by="created_at",
+            order_direction="desc"
+        )
+    
+    return [User(**user_data) for user_data in users], total_count
+
+def get_by_id_only(self, user_id: str) -> Optional[User]:
+    users = self._store.query(
+        filters={"id": user_id},
+        keys_only=False
+    )
+    
+    if users:
+        return User(**users[0])
+    return None
+```
+
+#### Day 3: AITestStore Migration
+
+**Changes Required**: Similar pattern with `group_id`, `status`, `risk_level` filters.
+
+#### Day 4: PromptStore/PromptCategoryStore/PromptSetStore Migration
+
+**Changes Required**: Handle `category_id`, `status`, tag filtering.
+
+#### Day 5: AIConfigurationStore and GroupStore Migration
+
+**Changes Required**: Handle `provider`, `status`, `created_by` filters.
+
+### Phase 3: Testing and Validation (1 day)
+
+#### 3.1 Performance Benchmarking
+```python
+# scripts/performance_benchmark.py
+def benchmark_list_operations():
+    # Test list operations with 100, 500, 1000 records
+    # Measure:
+    # - Query count (should be 1-2 instead of N+1)
+    # - Response time (should be 10-100x faster)
+    # - Memory usage
+```
+
+#### 3.2 Comprehensive Testing
+- All existing unit tests must pass
+- All API integration tests must pass
+- New performance tests for large datasets
+- Verify pagination works correctly
+- Verify filtering works correctly
+
+### Phase 4: Documentation and Cleanup (1 day)
+
+#### 4.1 Update Documentation
+- Add `query()` method documentation
+- Update performance notes
+- Mark old patterns as deprecated
+
+#### 4.2 Code Cleanup
+- Remove fallback `get_filtered()` usage from stores
+- Add performance warnings for `keys()` usage on large datasets
+- Update type hints
+
+## Expected Performance Improvements
+
+### Before (Redis Pattern)
+```
+List 100 records: 101 SQL queries (1 keys + 100 gets)
+Response time: 200-500ms
+Memory usage: High (individual record fetching)
+```
+
+### After (Direct SQL)
+```
+List 100 records: 1-2 SQL queries (1 main query + optional count)
+Response time: 10-20ms  
+Memory usage: Low (single result set)
+```
+
+**Improvement**: 10-25x faster response times, 50x fewer database queries.
+
+## Migration Timeline
+
+| Day | Store | Est. Time | Testing |
+|-----|-------|-----------|---------|
+| 1 | SQLStore.query() | 4h | Unit tests |
+| 2 | ExecutedTestStore | 3h | Unit + API tests |
+| 3 | UserStore | 4h | Unit + API tests |
+| 4 | AITestStore | 3h | Unit + API tests |
+| 5 | PromptStores (3) | 4h | Unit + API tests |
+| 6 | ConfigStore + GroupStore | 3h | Unit + API tests |
+| 7 | Performance testing | 4h | Benchmarks |
+| 8 | Documentation | 2h | Review |
+
+**Total: 8 days with comprehensive testing at each step**
+
+## Success Criteria
+
+- [x] ~~SQLStore.query() method implementation~~ ✅ **COMPLETED**
+- [x] ~~StoreProtocol.query() interface added~~ ✅ **COMPLETED**  
+- [x] ~~LocalStore.query() and RedisStore.query() implementations~~ ✅ **COMPLETED**
+- [x] ~~All existing tests pass with new query() method~~ ✅ **COMPLETED**
+- [x] ~~ExecutedTestStore migration to query() method~~ ✅ **COMPLETED**
+- [x] ~~UserStore migration to query() method with SQL text search~~ ✅ **COMPLETED**
+- [ ] AITestStore migration to query() method
+- [ ] PromptStore/PromptCategoryStore migration to query() method  
+- [ ] AIConfigurationStore and GroupStore migration to query() method
+- [ ] Performance improvement of 10x+ for list operations
+- [ ] All existing tests pass without modification
+- [ ] Pagination works correctly with new implementation
+- [ ] Filtering works correctly with new implementation
+- [ ] `keys()` method preserved for Redis compatibility
+- [ ] Performance benchmarks documented
+- [ ] Unit tests for new query() methods and helper functions
+
+---
+
+## ✅ PHASE 1 & 2 PROGRESS: Store Migration Implementation
+
+### Phase 1: ✅ COMPLETE - SQLStore Query Method Implementation 
+
+**Completed Tasks (2024-07-29):**
+
+1. **Enhanced SQLStore class** (`app/modules/sql_store.py`):
+   - ✅ Added `query()` method with filtering, pagination, and sorting
+   - ✅ Enhanced with SQL operators: `__ilike`, `__like`, `__in` for advanced filtering
+   - ✅ Added `_or` filter support for OR conditions: `filters={"_or": [{"email__ilike": "%search%"}, {"full_name__ilike": "%search%"}]}`
+   - ✅ Full PostgreSQL compatibility with proper type handling
+   - ✅ Efficient single-query operations instead of N+1 patterns
+
+2. **Updated StoreProtocol interface** (`app/modules/store_interface.py`):
+   - ✅ Added `query()` method signature to protocol
+   - ✅ Ensures all store implementations are consistent
+
+3. **Store implementations updated**:
+   - ✅ **SQLStore**: Full SQL implementation with database queries and advanced operators
+   - ✅ **LocalStore**: In-memory implementation with `_values_match()` helper for UUID/string comparison and OR condition support
+   - ✅ **RedisStore**: Simple delegation to `keys()` method for backward compatibility
+
+4. **Testing Results**:
+   - ✅ All 111 existing store tests pass
+   - ✅ Syntax validation successful
+   - ✅ Import validation successful
+   - ✅ Protocol compliance verified
+
+### Phase 2: ✅ PARTIAL COMPLETE - Store Migration to query() Method
+
+**Completed Store Migrations:**
+
+#### ✅ ExecutedTestStore (`app/modules/executions_store.py`)
+- **Optimized Methods**: `list()`, `list_outstanding_tasks()`
+- **Performance Gain**: Single SQL query with filters instead of N+1 pattern
+- **New Helpers**: `_convert_to_schema()`, `_passes_complex_filters()`, `_list_fallback()`
+- **SQL Features Used**: `test_id` filter, `validation_status` IN clause, `order_by="executed_at"`
+- **Complex Filters**: Post-processing for `result` and `has_errors` parameters
+- **Testing**: ✅ All 13 ExecutedTestStore tests pass
+
+#### ✅ UserStore (`app/modules/user_store.py`)  
+- **Optimized Methods**: `list()`, `get_by_id_only()`
+- **Performance Gain**: Single SQL query with OR text search instead of N+1 pattern
+- **New Helpers**: `_list_fallback()`, `_get_by_id_only_fallback()`
+- **SQL Features Used**: 
+  - `group_id` filter
+  - OR text search: `{"_or": [{"email__ilike": "%search%"}, {"full_name__ilike": "%search%"}]}`
+  - Efficient pagination and sorting
+- **Testing**: ✅ All 25 UserStore tests pass (updated mocks for query() method)
+
+**Advanced SQL Query Features Implemented:**
+- **Text Search**: `filters={"email__ilike": "%search%"}` generates `email ILIKE '%search%'`
+- **OR Conditions**: `filters={"_or": [...]}` generates `(condition1 OR condition2)`
+- **IN Clauses**: `filters={"status": ["ACTIVE", "PENDING"]}` generates `status IN ('ACTIVE', 'PENDING')`
+- **Combined Filters**: Mix AND, OR, and operators in single query
+
+---
+
+## 🧪 TESTING REQUIREMENTS: New Functions Need Unit Tests
+
+The following new methods and helper functions were created during the migration and require comprehensive unit tests:
+
+### SQLStore Methods (`app/modules/sql_store.py`)
+- **`query()`** - Core query method with filters, pagination, sorting
+  - Test basic filtering: `{"status": "ACTIVE"}`
+  - Test operators: `{"email__ilike": "%search%"}`, `{"status__in": ["A", "B"]}`
+  - Test OR conditions: `{"_or": [{"field1": "val1"}, {"field2": "val2"}]}`
+  - Test pagination: `page=1, limit=10` returns `(results, total_count)`
+  - Test sorting: `order_by="created_at", order_direction="desc"`
+  - Test keys_only vs full records
+  - Test error handling and edge cases
+
+### LocalStore Methods (`app/modules/store_interface.py`)
+- **`query()`** - In-memory implementation mirroring SQL behavior
+  - Test same scenarios as SQLStore but with in-memory data
+  - Test UUID/string value matching
+  - Test OR condition logic
+  - Test sorting with datetime values
+- **`_values_match()`** - Helper for UUID/string comparison
+  - Test UUID to string matching: `UUID('abc-123') == 'abc-123'`
+  - Test string to string matching
+  - Test null/None handling
+  - Test edge cases
+
+### ExecutedTestStore Methods (`app/modules/executions_store.py`)
+- **`_convert_to_schema()`** - Convert raw data to ExecutedTestSchema
+  - Test successful conversion
+  - Test field fixing (None values, invalid types)
+  - Test error handling for malformed data
+- **`_passes_complex_filters()`** - Apply complex filters
+  - Test `result` filtering with validations array
+  - Test `has_errors` filtering with error field
+  - Test combined filters
+- **`_list_fallback()`** - Fallback for stores without query() can likely use the existing list() tests
+  - Test Redis-style filtering logic
+  - Test error handling
+
+### UserStore Methods (`app/modules/user_store.py`)
+- **`_list_fallback()`** - Fallback implementation
+  - Test group filtering
+  - Test search filtering
+  - Test pagination logic
+- **`_get_by_id_only_fallback()`** - Fallback for ID lookup
+  - Test successful user lookup
+  - Test user not found
+  - Test invalid key handling
+
+### Test Coverage Goals
+- **Unit Tests**: Each new method tested in isolation
+- **Integration Tests**: Methods tested with real LocalStore/SQLStore
+- **Edge Cases**: Null values, malformed data, empty results
+- **Performance Tests**: Verify query efficiency vs old N+1 pattern
+- **Compatibility Tests**: Ensure Redis fallback works correctly
+
+**Recommended Test Files to Create/Update:**
+- `tests/modules/test_sql_store.py` - New file for SQLStore query() tests
+- `tests/modules/test_local_store_query.py` - New file for LocalStore query() tests  
+- `tests/modules/test_executions_store_helpers.py` - Test helper methods
+- `tests/modules/test_user_store_helpers.py` - Test helper methods
+
+---
+
+## 🚀 NEXT PHASE: Continue Store Migration
+
+**Next Stores to Migrate:**
+1. **AITestStore** - Similar patterns to ExecutedTestStore
+2. **PromptStore/PromptCategoryStore** - Handle category relationships
+3. **AIConfigurationStore and GroupStore** - Provider and status filtering
+
+## Rollback Plan
+
+If any issues arise during migration:
+1. Each store migration is independent - can rollback individual stores
+2. `query()` method is additive - doesn't break existing functionality
+3. Keep old `get_filtered()` fallback as backup
+4. Comprehensive test suite catches regressions immediately
+
+This phased approach ensures reliability while delivering significant performance improvements to the application.

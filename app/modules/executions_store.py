@@ -109,52 +109,141 @@ class ExecutedTestStore:
         result: Optional[str] = None,
         has_errors: Optional[bool] = None,
     ) -> Tuple[List[ExecutedTestSchema], int]:
-        # Get all keys
+        # Try to use efficient query() method first
+        try:
+            # Step 1: Build SQL-compatible filters only
+            filters = {"test_id": test_id}
+            if status:
+                filters["validation_status"] = status
+            elif statuses:
+                filters["validation_status"] = statuses
+            
+            # Step 2: Determine if we need post-filtering
+            needs_post_filter = result is not None or has_errors is not None
+            
+            if needs_post_filter:
+                # Get ALL matching records, then filter and paginate manually
+                execution_data_list = self._store.query(
+                    filters=filters,
+                    keys_only=False,
+                    order_by="executed_at",
+                    order_direction="desc"
+                )
+                
+                # Convert to schema objects and apply complex filters
+                filtered_executions = []
+                for execution_data in execution_data_list:
+                    execution = self._convert_to_schema(execution_data)
+                    if execution and self._passes_complex_filters(execution, result, has_errors):
+                        filtered_executions.append(execution)
+                
+                # Apply pagination manually
+                total_count = len(filtered_executions)
+                start = (page - 1) * limit
+                end = start + limit
+                return filtered_executions[start:end], total_count
+            else:
+                # Use efficient database pagination
+                execution_data_list, total_count = self._store.query(
+                    filters=filters,
+                    keys_only=False,
+                    page=page,
+                    limit=limit,
+                    order_by="executed_at",
+                    order_direction="desc"
+                )
+                
+                # Convert to schema objects
+                result_executions = []
+                for execution_data in execution_data_list:
+                    execution = self._convert_to_schema(execution_data)
+                    if execution:
+                        result_executions.append(execution)
+                
+                return result_executions, total_count
+            
+        except (AttributeError, TypeError):
+            # Fallback to original implementation for stores without query() method
+            return self._list_fallback(test_id, page, limit, status, statuses, result, has_errors)
+    
+    def _convert_to_schema(self, execution_data: dict) -> Optional[ExecutedTestSchema]:
+        """Convert raw execution data to ExecutedTestSchema object"""
+        try:
+            # Fix None values for required string fields
+            if execution_data.get('prompt') is None:
+                execution_data['prompt'] = ""
+            if execution_data.get('response') is None:
+                execution_data['response'] = ""
+            
+            # Fix input_variables if it's an empty string or invalid type
+            if execution_data.get('input_variables') == "" or not isinstance(execution_data.get('input_variables'), (dict, type(None))):
+                execution_data['input_variables'] = None
+            
+            # Fix error field if it's an empty string or invalid type
+            if execution_data.get('error') == "" or not isinstance(execution_data.get('error'), (dict, type(None))):
+                execution_data['error'] = None
+            
+            return ExecutedTestSchema(**execution_data)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error converting execution data: {e}")
+            return None
+    
+    def _passes_complex_filters(self, execution: ExecutedTestSchema, result: Optional[str], has_errors: Optional[bool]) -> bool:
+        """Check if execution passes complex filters that can't be done at SQL level"""
+        if result and not any(v.status == result for v in execution.validations):
+            return False
+        if has_errors is not None:
+            if has_errors and not execution.error:
+                return False
+            if not has_errors and execution.error:
+                return False
+        return True
+    
+    def _list_fallback(
+        self,
+        test_id: str,
+        page: int,
+        limit: int,
+        status: Optional[str],
+        statuses: Optional[List[str]],
+        result: Optional[str],
+        has_errors: Optional[bool]
+    ) -> Tuple[List[ExecutedTestSchema], int]:
+        """Fallback implementation for stores without query() method"""
         keys = self._store.keys()
-
         if not keys:
             return [], 0
 
-        # Get all executions
         executions = []
         for key in keys:
-            # Convert key to string to handle both UUID and string keys
             key_str = str(key)
-            # Skip index keys
             if key_str.startswith(self._test_to_executions_prefix):
                 continue
                 
             try:
                 execution = self.get(key)
                 if execution and str(execution.test_id) == test_id:
-                    # Apply filters
+                    # Apply all filters
                     if status and execution.validation_status != status:
                         continue
                     if statuses and execution.validation_status not in statuses:
                         continue
-                    if result and not any(v.status == result for v in execution.validations):
+                    if not self._passes_complex_filters(execution, result, has_errors):
                         continue
-                    if has_errors is not None:
-                        if has_errors and not execution.error:
-                            continue
-                        if not has_errors and execution.error:
-                            continue
                     executions.append(execution)
             except Exception:
-                # Skip keys that can't be deserialized as ExecutedTestSchema
-                # This happens when the store contains other types of data (like tests)
                 continue
 
         # Sort by executed_at descending
         executions.sort(key=lambda x: x.executed_at, reverse=True)
 
-        # Calculate pagination
+        # Apply pagination
         total = len(executions)
         start = (page - 1) * limit
         end = start + limit
-        paginated_executions = executions[start:end]
-
-        return paginated_executions, total
+        return executions[start:end], total
 
     def create(
         self,

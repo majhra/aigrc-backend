@@ -56,6 +56,23 @@ class UserStore:
 
     def get_by_id_only(self, user_id: str) -> Optional[User]:
         """Get a user by ID only (searches across all groups)."""
+        # Try to use efficient query() method first
+        try:
+            users = self._store.query(
+                filters={"id": user_id},
+                keys_only=False
+            )
+            
+            if users:
+                return User(**users[0])
+            return None
+            
+        except (AttributeError, TypeError):
+            # Fallback for stores without query() method
+            return self._get_by_id_only_fallback(user_id)
+    
+    def _get_by_id_only_fallback(self, user_id: str) -> Optional[User]:
+        """Fallback implementation for stores without query() method"""
         # Check if this is an SQL store (has get_filtered method and is not a mock)
         is_sql_store = hasattr(self._store, 'get_filtered') and hasattr(self._store, 'session')
         
@@ -91,87 +108,45 @@ class UserStore:
         search: Optional[str] = None,
     ) -> tuple[List[User], int]:
         """List users with pagination and filtering."""
-        sql_filtered = False  # Track if SQL filtering was used
-        
-        # For SQL stores, use more efficient filtered queries when possible
+        # Try to use efficient query() method first
         try:
-            if hasattr(self._store, 'get_filtered'):
-                # Build filters for SQL query
-                filters = {}
-                if group_id:
-                    filters['group_id'] = group_id
-                
-                # Get filtered results from SQL
-                if filters:
-                    sql_filtered = True
-                    user_data = self._store.get_filtered(filters)
-                    users = []
-                    for data in user_data:
-                        try:
-                            user = User(**data)
-                            users.append(user)
-                        except Exception:
-                            continue
-                else:
-                    # No filters were applied, fall back to keys() approach for SQL stores
-                    keys = self._store.keys()
-                    if keys:
-                        users = []
-                        for key in keys:
-                            try:
-                                parsed_group_id, user_id = self._parse_user_key(key)
-                                user = self.get(parsed_group_id, user_id)
-                                if user:
-                                    users.append(user)
-                            except ValueError:
-                                continue
-                    else:
-                        users = []
-            else:
-                raise Exception("Not an SQL store")
-        except Exception:
-            # Fallback to Redis-style approach
-            keys = self._store.keys()
-
-            if not keys:
-                return [], 0
-
-            # Filter keys by group if specified - only for Redis-style approach
+            # Build SQL-compatible filters
+            filters = {}
             if group_id:
-                keys = [key for key in keys if key.startswith(f"{group_id}:")]
-
-            # Get all users
-            try:
-                users = []
-                for key in keys:
-                    try:
-                        parsed_group_id, user_id = self._parse_user_key(key)
-                        user = self.get(parsed_group_id, user_id)
-                        if user:
-                            users.append(user)
-                    except ValueError:
-                        # Skip keys that don't match the expected format
-                        continue
-            except Exception as e:
-                print(f"error: {e}")
-                return [], 0
-
-        # Apply search filter
-        if search:
-            search_lower = search.lower()
-            users = [
-                u for u in users
-                if search_lower in u.email.lower()
-                or (u.full_name and search_lower in u.full_name.lower())
-            ]
-
-        # Calculate pagination
-        total = len(users)
-        start = (page - 1) * limit
-        end = start + limit
-        paginated_users = users[start:end]
-
-        return paginated_users, total
+                filters["group_id"] = group_id
+            
+            # Add SQL text search using OR condition for email and full_name
+            if search:
+                search_pattern = f"%{search}%"
+                filters["_or"] = [
+                    {"email__ilike": search_pattern},
+                    {"full_name__ilike": search_pattern}
+                ]
+            
+            # Use efficient database pagination
+            user_data_list, total_count = self._store.query(
+                filters=filters,
+                keys_only=False,
+                page=page,
+                limit=limit,
+                order_by="created_at",
+                order_direction="desc"
+            )
+            
+            # Convert to User objects
+            users = []
+            for user_data in user_data_list:
+                try:
+                    user = User(**user_data)
+                    users.append(user)
+                except Exception:
+                    continue
+            
+            return users, total_count
+            
+        except (AttributeError, TypeError):
+            # Fallback to original implementation
+            return self._list_fallback(group_id, page, limit, search)
 
     def create(self, user_data: User, group_id: str) -> User:
         """Create a new user in a specific group."""

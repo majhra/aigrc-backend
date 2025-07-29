@@ -1,9 +1,9 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import Table, select, insert, update, delete, and_
+from sqlalchemy import Table, select, insert, update, delete, and_, or_, func
 from app.modules.store_interface import StoreProtocol
 from app.modules.tlogger import TLogger
 import json
-from typing import Dict, List
+from typing import Dict, List, Any, Optional, Union, Tuple
 import uuid
 from datetime import datetime
 
@@ -135,6 +135,169 @@ class SQLStore(StoreProtocol):
             
         except Exception as e:
             self.logger.error(f"Error retrieving filtered records {filters}: {str(e)}")
+            raise
+
+    def query(
+        self, 
+        filters: Optional[Dict[str, Any]] = None,
+        keys_only: bool = True,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
+        order_by: Optional[str] = None,
+        order_direction: str = "asc"
+    ) -> Union[List[str], List[Dict[str, Any]], Tuple[List[str], int], Tuple[List[Dict[str, Any]], int]]:
+        """
+        Unified query method for efficient data retrieval.
+        
+        Args:
+            filters: Dict of column_name: value filters
+            keys_only: If True, return only keys; if False, return full records
+            page: Page number for pagination (1-based)
+            limit: Records per page
+            order_by: Column name to sort by
+            order_direction: "asc" or "desc"
+        
+        Returns:
+            - List[str]: Keys only, no pagination
+            - List[Dict]: Full records, no pagination  
+            - Tuple[List[str], int]: Keys + total count
+            - Tuple[List[Dict], int]: Records + total count
+        """
+        try:
+            # Build base query
+            if keys_only:
+                stmt = select(getattr(self.table.c, self.key_column))
+            else:
+                stmt = select(self.table)
+            
+            # Apply filters
+            if filters:
+                conditions = []
+                for column_name, value in filters.items():
+                    # Handle special OR conditions
+                    if column_name == '_or':
+                        or_conditions = []
+                        for or_filter in value:
+                            for or_column_name, or_value in or_filter.items():
+                                if '__' in or_column_name:
+                                    field_name, operator = or_column_name.rsplit('__', 1)
+                                    if hasattr(self.table.c, field_name):
+                                        column = getattr(self.table.c, field_name)
+                                        if operator == 'ilike':
+                                            or_conditions.append(column.ilike(or_value))
+                                        elif operator == 'like':
+                                            or_conditions.append(column.like(or_value))
+                                        elif operator == 'in':
+                                            or_conditions.append(column.in_(or_value))
+                                elif hasattr(self.table.c, or_column_name):
+                                    if isinstance(or_value, list):
+                                        or_conditions.append(getattr(self.table.c, or_column_name).in_(or_value))
+                                    else:
+                                        or_conditions.append(getattr(self.table.c, or_column_name) == or_value)
+                        if or_conditions:
+                            conditions.append(or_(*or_conditions))
+                    # Handle special search operators (column__operator format)
+                    elif '__' in column_name:
+                        field_name, operator = column_name.rsplit('__', 1)
+                        if hasattr(self.table.c, field_name):
+                            column = getattr(self.table.c, field_name)
+                            if operator == 'ilike':
+                                conditions.append(column.ilike(value))
+                            elif operator == 'like':
+                                conditions.append(column.like(value))
+                            elif operator == 'in':
+                                conditions.append(column.in_(value))
+                            # Add more operators as needed
+                    elif hasattr(self.table.c, column_name):
+                        if isinstance(value, list):
+                            conditions.append(getattr(self.table.c, column_name).in_(value))
+                        else:
+                            conditions.append(getattr(self.table.c, column_name) == value)
+                if conditions:
+                    stmt = stmt.where(and_(*conditions))
+            
+            # Apply ordering
+            if order_by and hasattr(self.table.c, order_by):
+                order_col = getattr(self.table.c, order_by)
+                if order_direction.lower() == "desc":
+                    stmt = stmt.order_by(order_col.desc())
+                else:
+                    stmt = stmt.order_by(order_col)
+            
+            # Handle pagination
+            if page is not None and limit is not None:
+                # Get total count first
+                count_stmt = select(func.count()).select_from(self.table)
+                # Apply same filters to count query
+                if filters:
+                    conditions = []
+                    for column_name, value in filters.items():
+                        # Handle special OR conditions
+                        if column_name == '_or':
+                            or_conditions = []
+                            for or_filter in value:
+                                for or_column_name, or_value in or_filter.items():
+                                    if '__' in or_column_name:
+                                        field_name, operator = or_column_name.rsplit('__', 1)
+                                        if hasattr(self.table.c, field_name):
+                                            column = getattr(self.table.c, field_name)
+                                            if operator == 'ilike':
+                                                or_conditions.append(column.ilike(or_value))
+                                            elif operator == 'like':
+                                                or_conditions.append(column.like(or_value))
+                                            elif operator == 'in':
+                                                or_conditions.append(column.in_(or_value))
+                                    elif hasattr(self.table.c, or_column_name):
+                                        if isinstance(or_value, list):
+                                            or_conditions.append(getattr(self.table.c, or_column_name).in_(or_value))
+                                        else:
+                                            or_conditions.append(getattr(self.table.c, or_column_name) == or_value)
+                            if or_conditions:
+                                conditions.append(or_(*or_conditions))
+                        # Handle special search operators (column__operator format)
+                        elif '__' in column_name:
+                            field_name, operator = column_name.rsplit('__', 1)
+                            if hasattr(self.table.c, field_name):
+                                column = getattr(self.table.c, field_name)
+                                if operator == 'ilike':
+                                    conditions.append(column.ilike(value))
+                                elif operator == 'like':
+                                    conditions.append(column.like(value))
+                                elif operator == 'in':
+                                    conditions.append(column.in_(value))
+                                # Add more operators as needed
+                        elif hasattr(self.table.c, column_name):
+                            if isinstance(value, list):
+                                conditions.append(getattr(self.table.c, column_name).in_(value))
+                            else:
+                                conditions.append(getattr(self.table.c, column_name) == value)
+                    if conditions:
+                        count_stmt = count_stmt.where(and_(*conditions))
+                
+                total_count = self.session.execute(count_stmt).scalar()
+                
+                # Apply pagination
+                offset = (page - 1) * limit
+                stmt = stmt.offset(offset).limit(limit)
+                
+                # Execute query
+                results = self.session.execute(stmt).fetchall()
+                
+                if keys_only:
+                    return [str(row[0]) for row in results], total_count
+                else:
+                    return [self._row_to_dict(row) for row in results], total_count
+            else:
+                # No pagination
+                results = self.session.execute(stmt).fetchall()
+                
+                if keys_only:
+                    return [str(row[0]) for row in results]
+                else:
+                    return [self._row_to_dict(row) for row in results]
+                    
+        except Exception as e:
+            self.logger.error(f"Error in query: {str(e)}")
             raise
     
     def _prepare_record(self, key: str, value: dict) -> dict:

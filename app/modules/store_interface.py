@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Protocol
+from typing import Any, Dict, List, Protocol, Optional, Union, Tuple
 
 import msgpack
 import redis
@@ -20,6 +20,34 @@ class StoreProtocol(Protocol):
         pass
 
     def pop(self, key: str) -> dict | None:
+        pass
+
+    def query(
+        self, 
+        filters: Optional[Dict[str, Any]] = None,
+        keys_only: bool = True,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
+        order_by: Optional[str] = None,
+        order_direction: str = "asc"
+    ) -> Union[List[str], List[Dict[str, Any]], Tuple[List[str], int], Tuple[List[Dict[str, Any]], int]]:
+        """
+        Unified query method for efficient data retrieval.
+        
+        Args:
+            filters: Dict of column_name: value filters
+            keys_only: If True, return only keys; if False, return full records
+            page: Page number for pagination (1-based)
+            limit: Records per page
+            order_by: Column name to sort by
+            order_direction: "asc" or "desc"
+        
+        Returns:
+            - List[str]: Keys only, no pagination
+            - List[Dict]: Full records, no pagination  
+            - Tuple[List[str], int]: Keys + total count
+            - Tuple[List[Dict], int]: Records + total count
+        """
         pass
 
 
@@ -288,6 +316,24 @@ class RedisStore(StoreProtocol):
         self.logger.info(f"Redis pop complete: {data}")
         return data
 
+    def query(
+        self, 
+        filters: Optional[Dict[str, Any]] = None,
+        keys_only: bool = True,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
+        order_by: Optional[str] = None,
+        order_direction: str = "asc"
+    ) -> Union[List[str], List[Dict[str, Any]], Tuple[List[str], int], Tuple[List[Dict[str, Any]], int]]:
+        """Simple delegation to keys() - let list() methods handle filtering"""
+        if keys_only and not filters and not page and not limit:
+            # Simple case - just return all keys
+            return self.keys()
+        else:
+            # For any complex operations, delegate to existing keys() method
+            # Store classes will handle the filtering with existing logic
+            return self.keys()
+
 
 class LocalStore(StoreProtocol):
     def __init__(self):
@@ -320,3 +366,138 @@ class LocalStore(StoreProtocol):
         if user_data and 'email' in user_data:
             self.email_index.pop(user_data['email'], None)
         return self.data.pop(str(key), None)
+
+    def query(
+        self, 
+        filters: Optional[Dict[str, Any]] = None,
+        keys_only: bool = True,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
+        order_by: Optional[str] = None,
+        order_direction: str = "asc"
+    ) -> Union[List[str], List[Dict[str, Any]], Tuple[List[str], int], Tuple[List[Dict[str, Any]], int]]:
+        """In-memory implementation that mirrors SQL behavior for testing"""
+        all_keys = list(self.data.keys())
+        
+        # Apply filters
+        if filters:
+            filtered_keys = []
+            for key in all_keys:
+                record = self.data[key]
+                match = True
+                for filter_key, filter_value in filters.items():
+                    # Handle special OR conditions
+                    if filter_key == '_or':
+                        or_match = False
+                        for or_filter in filter_value:
+                            for or_column_name, or_value in or_filter.items():
+                                if '__' in or_column_name:
+                                    field_name, operator = or_column_name.rsplit('__', 1)
+                                    record_value = record.get(field_name)
+                                    
+                                    if operator in ['ilike', 'like']:
+                                        if record_value is not None:
+                                            pattern = str(or_value).replace('%', '')
+                                            if pattern.lower() in str(record_value).lower():
+                                                or_match = True
+                                                break
+                                    elif operator == 'in':
+                                        if any(self._values_match(record_value, val) for val in or_value):
+                                            or_match = True
+                                            break
+                                else:
+                                    record_value = record.get(or_column_name)
+                                    if isinstance(or_value, list):
+                                        if any(self._values_match(record_value, val) for val in or_value):
+                                            or_match = True
+                                            break
+                                    else:
+                                        if self._values_match(record_value, or_value):
+                                            or_match = True
+                                            break
+                            if or_match:
+                                break
+                        if not or_match:
+                            match = False
+                            break
+                    # Handle special search operators (column__operator format)
+                    elif '__' in filter_key:
+                        field_name, operator = filter_key.rsplit('__', 1)
+                        record_value = record.get(field_name)
+                        
+                        if operator in ['ilike', 'like']:
+                            # Handle LIKE/ILIKE operations
+                            if record_value is None:
+                                match = False
+                                break
+                            # Convert SQL wildcard pattern to Python
+                            pattern = str(filter_value).replace('%', '')
+                            if pattern.lower() not in str(record_value).lower():
+                                match = False
+                                break
+                        elif operator == 'in':
+                            # Handle IN operations
+                            if not any(self._values_match(record_value, val) for val in filter_value):
+                                match = False
+                                break
+                    else:
+                        record_value = record.get(filter_key)
+                        
+                        # Handle different comparison scenarios
+                        if isinstance(filter_value, list):
+                            # Handle IN clause - check if record value matches any in the list
+                            if not any(self._values_match(record_value, val) for val in filter_value):
+                                match = False
+                                break
+                        else:
+                            # Handle single value comparison
+                            if not self._values_match(record_value, filter_value):
+                                match = False
+                                break
+                
+                if match:
+                    filtered_keys.append(key)
+            keys = filtered_keys
+        else:
+            keys = all_keys
+        
+        # Apply sorting (sort by the specified field)
+        if order_by:
+            def sort_key(key):
+                record = self.data[key]
+                value = record.get(order_by)
+                # Handle datetime objects and other types
+                if hasattr(value, 'timestamp'):
+                    return value.timestamp()
+                return value if value is not None else 0
+            
+            keys.sort(key=sort_key, reverse=(order_direction.lower() == "desc"))
+        
+        # Handle pagination
+        if page is not None and limit is not None:
+            total_count = len(keys)
+            start_idx = (page - 1) * limit
+            end_idx = start_idx + limit
+            paginated_keys = keys[start_idx:end_idx]
+            
+            if keys_only:
+                return paginated_keys, total_count
+            else:
+                records = [self.data[key] for key in paginated_keys]
+                return records, total_count
+        else:
+            if keys_only:
+                return keys
+            else:
+                return [self.data[key] for key in keys]
+    
+    def _values_match(self, record_value: Any, filter_value: Any) -> bool:
+        """Compare values handling UUID/string conversion"""
+        if record_value == filter_value:
+            return True
+        
+        # Handle UUID to string conversion
+        if hasattr(record_value, '__str__') and str(record_value) == str(filter_value):
+            return True
+        
+        return False

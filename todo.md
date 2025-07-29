@@ -8,10 +8,11 @@
 [x] - Authorization checks needed for user operations (admin or self)
 [x] - Validate user lookup has access to view user details
 [x] - tests are returned for all users. limit per user.
+[x] - Redis Keys are stored in a sorted set. Whenever we run keys() it returns the full set. This won't scale. We need to implement a pagination system or limit per user.
+[x] - user validation for tests, executions, etc.
+[x] - GET /api/v1.0/prompts/?page=1&limit=50&status=ACTIVE&search=tes doesn't seem to respond with valid data. is it because we're searching name rather than uuid? 
 [ ] - Email sender configuration needs to be reviewed
 [ ] - History of tasks needs to be implemented
-[ ] - Redis Keys are stored in a sorted set. Whenever we run keys() it returns the full set. This won't scale. We need to implement a pagination system or limit per user.
-[ ] - user validation for tests, executions, etc.
 [ ] - only draft tests can be changed or deleted. 
 [ ] - copy test to draft.
 [ ] - security around the test init. Server side, how to ensure the requester is also the owner of the target chatbot, else it's a security exploit (ddos etc). On the browser, handle CORS. Handle logins. 
@@ -21,7 +22,6 @@
 [ ] - admin group membership
 
 [ ] - add user id to all backend logs to track who does what. 
-[x] - GET /api/v1.0/prompts/?page=1&limit=50&status=ACTIVE&search=tes doesn't seem to respond with valid data. is it because we're searching name rather than uuid? 
 [ ] - Select Prompt from Library 'GET /api/v1.0/prompts/?page=1&limit=100&category_type=SAFETY&status=ACTIVE' fails for categoty_type
 [ ] - The tests themselves have limited connection stored compared with the AI emdpoint config. Update!
 
