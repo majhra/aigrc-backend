@@ -95,8 +95,8 @@ class UserStore:
                 group_id, stored_user_id = self._parse_user_key(key)
                 if stored_user_id == user_id:
                     return self.get(group_id, user_id)
-            except ValueError:
-                # Skip keys that don't match the expected format
+            except (ValueError, Exception):
+                # Skip keys that don't match the expected format or have retrieval errors
                 continue
         return None
 

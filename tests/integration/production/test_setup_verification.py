@@ -7,7 +7,7 @@ is working correctly before running the full test suite.
 import pytest
 
 from utils.api_client import ProductionAPIClient
-from utils.test_data_factory import TestDataFactory
+from utils.test_data_factory import ProductionDataFactory
 
 
 class TestSetupVerification:
@@ -27,7 +27,7 @@ class TestSetupVerification:
     
     def test_data_factory_creation(self):
         """Test that data factory can be created"""
-        factory = TestDataFactory()
+        factory = ProductionDataFactory()
         assert factory is not None
         
         # Test creating sample data
@@ -72,7 +72,7 @@ class TestSetupVerification:
         # Should require authentication
         assert response.status_code == 401, f"Protected endpoint should require auth, got {response.status_code}"
     
-    def test_data_factory_scenarios(self, data_factory: TestDataFactory):
+    def test_data_factory_scenarios(self, data_factory: ProductionDataFactory):
         """Test that data factory can create various scenarios"""
         
         # Test user creation

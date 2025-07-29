@@ -223,6 +223,9 @@ class TestCascadeDeletionScenarios(unittest.TestCase):
             executions.append(execution)
         
         with patch.object(self.execution_store, '_store') as mock_store:
+            # Remove query method to force fallback to _list_fallback
+            del mock_store.query
+            
             # Mock listing executions for the test
             mock_store.keys.return_value = [execution.id for execution in executions]
             

@@ -15,7 +15,7 @@ import pytest
 from typing import Dict, Any, List
 
 from utils.api_client import ProductionAPIClient, APIResponse
-from utils.test_data_factory import TestDataFactory, TestUser
+from utils.test_data_factory import ProductionDataFactory, ProductionTestUser
 from conftest import (
     assert_success_response, 
     assert_error_response, 
@@ -57,7 +57,7 @@ class TestProductionIntegration:
             response = clean_api_client.get(endpoint)
             assert_auth_required(response)
     
-    def test_user_registration_and_login_flow(self, clean_api_client: ProductionAPIClient, data_factory: TestDataFactory):
+    def test_user_registration_and_login_flow(self, clean_api_client: ProductionAPIClient, data_factory: ProductionDataFactory):
         """Test complete user registration and login workflow"""
         
         # Create test user data
@@ -99,7 +99,7 @@ class TestProductionIntegration:
 class TestGetEndpoints:
     """Test all GET endpoints for both regular users and admins"""
     
-    def test_user_profile_endpoints(self, api_client: ProductionAPIClient, regular_user: TestUser, admin_user: TestUser):
+    def test_user_profile_endpoints(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser, admin_user: ProductionTestUser):
         """Test user profile related GET endpoints"""
         
         # Test as regular user
@@ -128,7 +128,7 @@ class TestGetEndpoints:
             assert_success_response(users_response)
             assert isinstance(users_response.data, list)
     
-    def test_prompt_endpoints(self, api_client: ProductionAPIClient, regular_user: TestUser, admin_user: TestUser):
+    def test_prompt_endpoints(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser, admin_user: ProductionTestUser):
         """Test prompt-related GET endpoints"""
         
         # Test as regular user
@@ -155,7 +155,7 @@ class TestGetEndpoints:
         admin_prompts_response = api_client.get("/prompts/")
         assert_success_response(admin_prompts_response)
     
-    def test_configuration_endpoints(self, api_client: ProductionAPIClient, regular_user: TestUser, admin_user: TestUser):
+    def test_configuration_endpoints(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser, admin_user: ProductionTestUser):
         """Test configuration-related GET endpoints"""
         
         # Test as regular user
@@ -179,7 +179,7 @@ class TestGetEndpoints:
         admin_configs_response = api_client.get("/configurations/")
         assert_success_response(admin_configs_response)
     
-    def test_tests_endpoints(self, api_client: ProductionAPIClient, regular_user: TestUser, admin_user: TestUser):
+    def test_tests_endpoints(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser, admin_user: ProductionTestUser):
         """Test AI tests related GET endpoints"""
         
         # Test as regular user
@@ -195,7 +195,7 @@ class TestGetEndpoints:
         admin_tests_response = api_client.get("/tests")
         assert_success_response(admin_tests_response)
     
-    def test_reports_endpoints(self, api_client: ProductionAPIClient, regular_user: TestUser, admin_user: TestUser):
+    def test_reports_endpoints(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser, admin_user: ProductionTestUser):
         """Test reports related GET endpoints"""
         
         # Test as regular user
@@ -223,7 +223,7 @@ class TestGetEndpoints:
 class TestCrudOperations:
     """Test POST, PUT, DELETE operations for all endpoints"""
     
-    def test_prompt_category_crud(self, api_client: ProductionAPIClient, regular_user: TestUser, admin_user: TestUser, data_factory: TestDataFactory):
+    def test_prompt_category_crud(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser, admin_user: ProductionTestUser, data_factory: ProductionDataFactory):
         """Test complete CRUD operations for prompt categories"""
         
         # Test as regular user
@@ -257,7 +257,7 @@ class TestCrudOperations:
         verify_delete_response = api_client.get(f"/prompts/categories/{category_id}")
         assert_not_found(verify_delete_response)
     
-    def test_prompt_crud(self, api_client: ProductionAPIClient, regular_user: TestUser, data_factory: TestDataFactory):
+    def test_prompt_crud(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser, data_factory: ProductionDataFactory):
         """Test complete CRUD operations for prompts"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -291,7 +291,7 @@ class TestCrudOperations:
         delete_response = api_client.delete(f"/prompts/{prompt_id}")
         assert delete_response.status_code == 204
     
-    def test_configuration_crud(self, api_client: ProductionAPIClient, regular_user: TestUser, data_factory: TestDataFactory):
+    def test_configuration_crud(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser, data_factory: ProductionDataFactory):
         """Test complete CRUD operations for AI configurations"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -327,7 +327,7 @@ class TestCrudOperations:
         delete_response = api_client.delete(f"/configurations/{config_id}")
         assert delete_response.status_code == 204
     
-    def test_ai_test_crud(self, api_client: ProductionAPIClient, regular_user: TestUser, data_factory: TestDataFactory):
+    def test_ai_test_crud(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser, data_factory: ProductionDataFactory):
         """Test complete CRUD operations for AI tests"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -358,7 +358,7 @@ class TestCrudOperations:
 class TestExecutionWorkflow:
     """Test the complete test execution and validation workflow"""
     
-    def test_test_execution_workflow(self, api_client: ProductionAPIClient, regular_user: TestUser, data_factory: TestDataFactory):
+    def test_test_execution_workflow(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser, data_factory: ProductionDataFactory):
         """Test complete test execution workflow"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -409,7 +409,7 @@ class TestAuthorizationSecurity:
         # and verifying that users can't access other groups' data
         pass
     
-    def test_admin_privileges(self, api_client: ProductionAPIClient, admin_user: TestUser, regular_user: TestUser):
+    def test_admin_privileges(self, api_client: ProductionAPIClient, admin_user: ProductionTestUser, regular_user: ProductionTestUser):
         """Test that admin users have broader access than regular users"""
         
         # Test admin access to user list (may not work in production tests if user lacks real admin privileges)
@@ -438,7 +438,7 @@ class TestAuthorizationSecurity:
 class TestPerformanceAndReliability:
     """Test performance characteristics and reliability"""
     
-    def test_response_time_performance(self, api_client: ProductionAPIClient, regular_user: TestUser, performance_monitor):
+    def test_response_time_performance(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser, performance_monitor):
         """Test that API responses are within acceptable time limits"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -465,7 +465,7 @@ class TestPerformanceAndReliability:
         assert stats["avg_response_time"] < 2.0, f"Average response time too slow: {stats['avg_response_time']}s"
         assert stats["error_rate"] < 0.5, f"Error rate too high: {stats['error_rate']}"
     
-    def test_concurrent_request_handling(self, api_client: ProductionAPIClient, regular_user: TestUser):
+    def test_concurrent_request_handling(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser):
         """Test that the API can handle multiple concurrent requests"""
         
         import concurrent.futures
@@ -492,7 +492,7 @@ class TestPerformanceAndReliability:
 class TestErrorHandling:
     """Test error handling and edge cases"""
     
-    def test_invalid_data_handling(self, api_client: ProductionAPIClient, regular_user: TestUser):
+    def test_invalid_data_handling(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser):
         """Test that invalid data is properly rejected"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -506,7 +506,7 @@ class TestErrorHandling:
         response = api_client.post("/prompts/categories", {"name": None})
         assert response.status_code in [400, 422], f"Should reject null name, got {response.status_code}"
     
-    def test_nonexistent_resource_handling(self, api_client: ProductionAPIClient, regular_user: TestUser):
+    def test_nonexistent_resource_handling(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser):
         """Test handling of requests for non-existent resources"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -525,7 +525,7 @@ class TestErrorHandling:
             response = api_client.get(endpoint)
             assert_not_found(response)
     
-    def test_malformed_request_handling(self, api_client: ProductionAPIClient, regular_user: TestUser):
+    def test_malformed_request_handling(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser):
         """Test handling of malformed requests"""
         
         api_client.set_auth_token(regular_user.access_token)

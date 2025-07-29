@@ -11,7 +11,7 @@ from typing import Dict, Any, List, Generator
 from dataclasses import asdict
 
 from utils.api_client import ProductionAPIClient, APIResponse
-from utils.test_data_factory import TestDataFactory, TestUser, TestGroup
+from utils.test_data_factory import ProductionDataFactory, ProductionTestUser, ProductionTestGroup
 
 
 # Test configuration
@@ -39,9 +39,9 @@ def api_client() -> ProductionAPIClient:
 
 
 @pytest.fixture(scope="session")
-def data_factory() -> TestDataFactory:
+def data_factory() -> ProductionDataFactory:
     """Create test data factory"""
-    return TestDataFactory()
+    return ProductionDataFactory()
 
 
 @pytest.fixture(scope="function")
@@ -51,16 +51,16 @@ def clean_api_client(api_client: ProductionAPIClient) -> ProductionAPIClient:
     return api_client
 
 
-class TestUserManager:
+class ProductionTestUserManager:
     """Manages test users for integration testing"""
     
-    def __init__(self, api_client: ProductionAPIClient, data_factory: TestDataFactory):
+    def __init__(self, api_client: ProductionAPIClient, data_factory: ProductionDataFactory):
         self.api_client = api_client
         self.data_factory = data_factory
-        self.created_users: List[TestUser] = []
-        self.created_groups: List[TestGroup] = []
+        self.created_users: List[ProductionTestUser] = []
+        self.created_groups: List[ProductionTestGroup] = []
     
-    def create_and_register_user(self, user_data: TestUser, verify: bool = True) -> TestUser:
+    def create_and_register_user(self, user_data: ProductionTestUser, verify: bool = True) -> ProductionTestUser:
         """Create and register a new user, optionally verify email"""
         # Register user
         register_data = {
@@ -113,7 +113,7 @@ class TestUserManager:
         self.created_users.append(user_data)
         return user_data
     
-    def _update_user_role_to_admin(self, user_data: TestUser):
+    def _update_user_role_to_admin(self, user_data: ProductionTestUser):
         """Update a user's role to admin. In production, this would need existing admin or database access."""
         # For production tests, we can't easily make a user admin without existing admin privileges
         # This is a limitation of testing in production environment
@@ -129,17 +129,17 @@ class TestUserManager:
         # Log this limitation
         print(f"Warning: User {user_data.email} marked as admin in test data but may not have actual admin privileges in production system")
     
-    def create_admin_user(self, **overrides) -> TestUser:
+    def create_admin_user(self, **overrides) -> ProductionTestUser:
         """Create and register admin user"""
         admin_data = self.data_factory.create_admin_user(**overrides)
         return self.create_and_register_user(admin_data)
     
-    def create_regular_user(self, **overrides) -> TestUser:
+    def create_regular_user(self, **overrides) -> ProductionTestUser:
         """Create and register regular user"""
         user_data = self.data_factory.create_regular_user(**overrides)
         return self.create_and_register_user(user_data)
     
-    def create_user_in_group(self, group_id: str, role: str = "user", **overrides) -> TestUser:
+    def create_user_in_group(self, group_id: str, role: str = "user", **overrides) -> ProductionTestUser:
         """Create user in specific group"""
         user_data = self.data_factory.create_user_in_group(group_id, role, **overrides)
         return self.create_and_register_user(user_data)
@@ -152,15 +152,15 @@ class TestUserManager:
 
 
 @pytest.fixture(scope="function")
-def user_manager(api_client: ProductionAPIClient, data_factory: TestDataFactory) -> Generator[TestUserManager, None, None]:
+def user_manager(api_client: ProductionAPIClient, data_factory: ProductionDataFactory) -> Generator[ProductionTestUserManager, None, None]:
     """Provide user manager for test with cleanup"""
-    manager = TestUserManager(api_client, data_factory)
+    manager = ProductionTestUserManager(api_client, data_factory)
     yield manager
     manager.cleanup()
 
 
 @pytest.fixture(scope="function")
-def admin_user(user_manager: TestUserManager) -> TestUser:
+def admin_user(user_manager: ProductionTestUserManager) -> ProductionTestUser:
     """Create authenticated admin user for test"""
     user = user_manager.create_admin_user()
     if not user.access_token:
@@ -169,7 +169,7 @@ def admin_user(user_manager: TestUserManager) -> TestUser:
 
 
 @pytest.fixture(scope="function") 
-def regular_user(user_manager: TestUserManager) -> TestUser:
+def regular_user(user_manager: ProductionTestUserManager) -> ProductionTestUser:
     """Create authenticated regular user for test"""
     user = user_manager.create_regular_user()
     if not user.access_token:
@@ -178,7 +178,7 @@ def regular_user(user_manager: TestUserManager) -> TestUser:
 
 
 @pytest.fixture(scope="function")
-def two_group_scenario(user_manager: TestUserManager, api_client: ProductionAPIClient):
+def two_group_scenario(user_manager: ProductionTestUserManager, api_client: ProductionAPIClient):
     """Create scenario with two groups and users in each"""
     # Create admin user first
     admin = user_manager.create_admin_user()

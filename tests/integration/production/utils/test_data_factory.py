@@ -11,7 +11,7 @@ from dataclasses import dataclass, asdict
 
 
 @dataclass
-class TestUser:
+class ProductionTestUser:
     """Test user data structure"""
     email: str
     password: str
@@ -24,7 +24,7 @@ class TestUser:
 
 
 @dataclass
-class TestGroup:
+class ProductionTestGroup:
     """Test group data structure"""
     name: str
     description: str
@@ -32,7 +32,7 @@ class TestGroup:
 
 
 @dataclass
-class TestPrompt:
+class ProductionTestPrompt:
     """Test prompt data structure"""
     name: str
     description: str
@@ -43,7 +43,7 @@ class TestPrompt:
 
 
 @dataclass
-class TestPromptCategory:
+class ProductionTestPromptCategory:
     """Test prompt category data structure"""
     name: str
     description: str
@@ -51,7 +51,7 @@ class TestPromptCategory:
 
 
 @dataclass
-class TestConfiguration:
+class ProductionTestConfiguration:
     """Test AI configuration data structure"""
     name: str
     description: str
@@ -64,7 +64,7 @@ class TestConfiguration:
 
 
 @dataclass
-class TestAITest:
+class ProductionTestAITest:
     """Test AI test data structure"""
     name: str
     description: str
@@ -78,7 +78,7 @@ class TestAITest:
     id: Optional[str] = None
 
 
-class TestDataFactory:
+class ProductionDataFactory:
     """Factory for creating test data with realistic values"""
     
     def __init__(self):
@@ -95,7 +95,7 @@ class TestDataFactory:
         return f"goricoaico+{prefix}_{unique_id}@gmail.com"
     
     # User creation methods
-    def create_admin_user(self, **overrides) -> TestUser:
+    def create_admin_user(self, **overrides) -> ProductionTestUser:
         """Create admin user with default values"""
         defaults = {
             "email": self._get_unique_email("admin"),
@@ -104,9 +104,9 @@ class TestDataFactory:
             "role": "admin"
         }
         defaults.update(overrides)
-        return TestUser(**defaults)
+        return ProductionTestUser(**defaults)
     
-    def create_regular_user(self, **overrides) -> TestUser:
+    def create_regular_user(self, **overrides) -> ProductionTestUser:
         """Create regular user with default values"""
         defaults = {
             "email": self._get_unique_email("user"),
@@ -115,9 +115,9 @@ class TestDataFactory:
             "role": "user"
         }
         defaults.update(overrides)
-        return TestUser(**defaults)
+        return ProductionTestUser(**defaults)
     
-    def create_user_in_group(self, group_id: str, role: str = "user", **overrides) -> TestUser:
+    def create_user_in_group(self, group_id: str, role: str = "user", **overrides) -> ProductionTestUser:
         """Create user in specific group"""
         defaults = {
             "group": group_id,
@@ -131,7 +131,7 @@ class TestDataFactory:
             return self.create_regular_user(**defaults)
     
     # Group creation methods
-    def create_group(self, **overrides) -> TestGroup:
+    def create_group(self, **overrides) -> ProductionTestGroup:
         """Create test group with default values"""
         unique_id = self._get_unique_id()
         defaults = {
@@ -139,10 +139,10 @@ class TestDataFactory:
             "description": f"Test group for integration testing {unique_id}"
         }
         defaults.update(overrides)
-        return TestGroup(**defaults)
+        return ProductionTestGroup(**defaults)
     
     # Prompt and category creation methods
-    def create_prompt_category(self, **overrides) -> TestPromptCategory:
+    def create_prompt_category(self, **overrides) -> ProductionTestPromptCategory:
         """Create test prompt category"""
         unique_id = self._get_unique_id()
         defaults = {
@@ -150,9 +150,9 @@ class TestDataFactory:
             "description": f"Test category for integration testing {unique_id}"
         }
         defaults.update(overrides)
-        return TestPromptCategory(**defaults)
+        return ProductionTestPromptCategory(**defaults)
     
-    def create_prompt(self, **overrides) -> TestPrompt:
+    def create_prompt(self, **overrides) -> ProductionTestPrompt:
         """Create test prompt"""
         unique_id = self._get_unique_id()
         defaults = {
@@ -162,10 +162,10 @@ class TestDataFactory:
             "tags": ["integration", "test"]
         }
         defaults.update(overrides)
-        return TestPrompt(**defaults)
+        return ProductionTestPrompt(**defaults)
     
     # Configuration creation methods
-    def create_ai_configuration(self, **overrides) -> TestConfiguration:
+    def create_ai_configuration(self, **overrides) -> ProductionTestConfiguration:
         """Create test AI configuration"""
         unique_id = self._get_unique_id()
         defaults = {
@@ -178,10 +178,10 @@ class TestDataFactory:
             "model": "gpt-3.5-turbo"
         }
         defaults.update(overrides)
-        return TestConfiguration(**defaults)
+        return ProductionTestConfiguration(**defaults)
     
     # AI Test creation methods
-    def create_ai_test(self, **overrides) -> TestAITest:
+    def create_ai_test(self, **overrides) -> ProductionTestAITest:
         """Create test AI test"""
         unique_id = self._get_unique_id()
         
@@ -217,7 +217,7 @@ class TestDataFactory:
             "status": "ACTIVE"
         }
         defaults.update(overrides)
-        return TestAITest(**defaults)
+        return ProductionTestAITest(**defaults)
     
     # Execution data
     def create_execution_data(self, **overrides) -> Dict[str, Any]:
@@ -257,8 +257,8 @@ class TestDataFactory:
             # Remove None values and internal fields
             result = {k: v for k, v in data.items() if v is not None and not k.startswith('_')}
             
-            # Handle TestPrompt specific conversions
-            if isinstance(obj, TestPrompt):
+            # Handle ProductionTestPrompt specific conversions
+            if isinstance(obj, ProductionTestPrompt):
                 # Convert 'template' field to 'content' for API
                 if 'template' in result:
                     result['content'] = result.pop('template')
@@ -266,8 +266,8 @@ class TestDataFactory:
                 # Note: category_id should be provided by the test or will need to be created first
                 # The hardcoded category_id approach doesn't work in production tests
             
-            # Handle TestConfiguration specific conversions
-            elif isinstance(obj, TestConfiguration):
+            # Handle ProductionTestConfiguration specific conversions
+            elif isinstance(obj, ProductionTestConfiguration):
                 # Convert field names to match API schema
                 if 'endpoint' in result:
                     result['endpoint_url'] = result.pop('endpoint')

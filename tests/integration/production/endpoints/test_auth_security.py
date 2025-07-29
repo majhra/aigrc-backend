@@ -12,7 +12,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.api_client import ProductionAPIClient, APIResponse
-from utils.test_data_factory import TestDataFactory, TestUser
+from utils.test_data_factory import ProductionDataFactory, ProductionTestUser
 from conftest import (
     assert_auth_required, 
     assert_forbidden, 
@@ -161,7 +161,7 @@ class TestAuthenticationSecurity:
         response = clean_api_client.get("/user/me")
         assert_auth_required(response)
     
-    def test_token_expiration_handling(self, clean_api_client: ProductionAPIClient, data_factory: TestDataFactory):
+    def test_token_expiration_handling(self, clean_api_client: ProductionAPIClient, data_factory: ProductionDataFactory):
         """Test that expired tokens are properly rejected"""
         
         # Note: This test would require manipulating token expiration or waiting
@@ -172,7 +172,7 @@ class TestAuthenticationSecurity:
 class TestAuthorizationSecurity:
     """Test authorization and access control security"""
     
-    def test_user_cannot_access_admin_functions(self, api_client: ProductionAPIClient, regular_user: TestUser):
+    def test_user_cannot_access_admin_functions(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser):
         """Test that regular users cannot perform admin-only operations"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -241,7 +241,7 @@ class TestAuthorizationSecurity:
 class TestInputValidationSecurity:
     """Test input validation and injection prevention"""
     
-    def test_sql_injection_prevention(self, api_client: ProductionAPIClient, regular_user: TestUser):
+    def test_sql_injection_prevention(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser):
         """Test that SQL injection attempts are prevented"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -272,7 +272,7 @@ class TestInputValidationSecurity:
                 # Clean up
                 api_client.delete(f"/prompts/categories/{category_id}")
     
-    def test_xss_prevention(self, api_client: ProductionAPIClient, regular_user: TestUser):
+    def test_xss_prevention(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser):
         """Test that XSS attempts are prevented"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -301,7 +301,7 @@ class TestInputValidationSecurity:
                 # Clean up
                 api_client.delete(f"/prompts/categories/{category_id}")
     
-    def test_field_length_limits(self, api_client: ProductionAPIClient, regular_user: TestUser):
+    def test_field_length_limits(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser):
         """Test that excessively long inputs are properly handled"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -322,7 +322,7 @@ class TestInputValidationSecurity:
                 category_id = response.data.get("id")
                 api_client.delete(f"/prompts/categories/{category_id}")
     
-    def test_null_and_empty_input_handling(self, api_client: ProductionAPIClient, regular_user: TestUser):
+    def test_null_and_empty_input_handling(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser):
         """Test handling of null and empty inputs"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -346,7 +346,7 @@ class TestInputValidationSecurity:
 class TestRateLimitingSecurity:
     """Test rate limiting and abuse prevention"""
     
-    def test_basic_rate_limiting(self, api_client: ProductionAPIClient, regular_user: TestUser):
+    def test_basic_rate_limiting(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser):
         """Test that the API has some form of rate limiting"""
         
         api_client.set_auth_token(regular_user.access_token)
@@ -390,7 +390,7 @@ class TestErrorInformationLeakage:
             for term in sensitive_terms:
                 assert term not in error_message, f"Error message leaks user existence: {error_message}"
     
-    def test_resource_access_error_messages(self, api_client: ProductionAPIClient, regular_user: TestUser):
+    def test_resource_access_error_messages(self, api_client: ProductionAPIClient, regular_user: ProductionTestUser):
         """Test that resource access errors don't leak information"""
         
         api_client.set_auth_token(regular_user.access_token)
