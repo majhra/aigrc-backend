@@ -13,6 +13,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from jinja2 import Template
 
 from app.api import deps
+from app.api.deps import (
+    rate_limit_login,
+    rate_limit_registration,
+    rate_limit_password_reset,
+)
 from app.api.utils import (
     authenticate_user,
     create_access_token,
@@ -61,6 +66,7 @@ async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     logger: TLogger = Depends(deps.get_logger),
     user_store: UserStore = Depends(deps.get_user_store),
+    _rate_limit: None = Depends(rate_limit_login),
 ):
     username = format_email(form_data.username)
     password = form_data.password
@@ -107,6 +113,7 @@ async def create_user(
     logger: TLogger = Depends(deps.get_logger),
     user_store: UserStore = Depends(deps.get_user_store),
     group_store: GroupStore = Depends(deps.get_group_store),
+    _rate_limit: None = Depends(rate_limit_registration),
 ):
     # Check if user already exists
     email = user_credentials.email
@@ -267,6 +274,7 @@ async def resend_verification_email(
     email: str,
     logger: TLogger = Depends(deps.get_logger),
     user_store: UserStore = Depends(deps.get_user_store),
+    _rate_limit: None = Depends(rate_limit_registration),
 ):
     # Check if user exists
     user = user_store.get_by_email(email)
@@ -311,6 +319,7 @@ async def password_reset_request(
     password_reset_request_data: Annotated[UserPasswordResetRequest, Depends()],
     logger: TLogger = Depends(deps.get_logger),
     user_store: UserStore = Depends(deps.get_user_store),
+    _rate_limit: None = Depends(rate_limit_password_reset),
 ):
     email = password_reset_request_data.email.lower()
 
@@ -402,6 +411,7 @@ async def password_reset_verify(
     form_data: Annotated[UserPasswordResetVerify, Depends()],
     logger: TLogger = Depends(deps.get_logger),
     user_store: UserStore = Depends(deps.get_user_store),
+    _rate_limit: None = Depends(rate_limit_password_reset),
 ):
     email = form_data.email.lower()
     password_reset_code = form_data.password_reset_code.upper()

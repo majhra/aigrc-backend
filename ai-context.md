@@ -67,6 +67,11 @@ This document provides complete context for the backend development of this MVP 
 - Password reset with time-limited codes
 - CORS protection
 - Environment-based configuration
+- Rate limiting for sensitive endpoints:
+  - Login attempts (5 per minute, 5 min block)
+  - Registration (3 per hour)
+  - Password reset (3 per hour)
+  - AI connection tests (10 per minute)
 
 ### ✅ IMPLEMENTED - Email Integration
 - AWS SES integration for transactional emails
@@ -230,6 +235,7 @@ app/
 │   ├── reports_store.py        # Reporting functionality
 │   ├── ai_connection_service.py # AI endpoint connection handler
 │   ├── email_service.py        # Email integration
+│   ├── rate_limiter.py         # Rate limiting service
 │   └── tlogger.py              # Logging utilities
 ├── schemas/               # Pydantic models for data validation
 │   ├── user.py

@@ -63,6 +63,26 @@ class Settings(BaseSettings):
     UNLEASH_URL: AnyHttpUrl | None = None
     UNLEASH_INSTANCE_ID: str | None = None
 
+    # Rate limiting configuration
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_USE_REDIS: bool = False  # Set to True for distributed rate limiting
+    # Login rate limits
+    RATE_LIMIT_LOGIN_REQUESTS: int = 5
+    RATE_LIMIT_LOGIN_WINDOW_SECONDS: int = 60
+    RATE_LIMIT_LOGIN_BLOCK_SECONDS: int = 300
+    # Registration rate limits
+    RATE_LIMIT_REGISTRATION_REQUESTS: int = 3
+    RATE_LIMIT_REGISTRATION_WINDOW_SECONDS: int = 3600
+    RATE_LIMIT_REGISTRATION_BLOCK_SECONDS: int = 3600
+    # Password reset rate limits
+    RATE_LIMIT_PASSWORD_RESET_REQUESTS: int = 3
+    RATE_LIMIT_PASSWORD_RESET_WINDOW_SECONDS: int = 3600
+    RATE_LIMIT_PASSWORD_RESET_BLOCK_SECONDS: int = 1800
+    # AI connection test rate limits
+    RATE_LIMIT_AI_TEST_REQUESTS: int = 10
+    RATE_LIMIT_AI_TEST_WINDOW_SECONDS: int = 60
+    RATE_LIMIT_AI_TEST_BLOCK_SECONDS: int = 60
+
     # Variables which probably shouldn't be set in .env file (but they can be if you want)
     ASSETS_DIR: str = join("app", "assets")
     FRONTEND_URL_PATH_VERIFICATION: str = "/auth/verification"

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.api import deps
+from app.api.deps import rate_limit_ai_test
 from app.core.config import settings
 from app.modules.store_interface import StoreProtocol, RedisStore
 from app.modules.tests_store import AITestStore
@@ -657,6 +658,7 @@ async def test_ai_connection(
     request: ConnectionTestRequest,
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     logger: deps.TLogger = Depends(deps.get_logger),
+    _rate_limit: None = Depends(rate_limit_ai_test),
 ) -> ConnectionTestResponse:
     """
     Test the connection to an AI endpoint using the provided connection configuration.

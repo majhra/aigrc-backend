@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import JSONResponse
 
 from app.api import deps
+from app.api.deps import rate_limit_ai_test
 from app.modules.tlogger import TLogger
 from app.modules.configurations_store import AIConfigurationStore, AIProviderService
 from app.modules.store_interface import RedisStore
@@ -228,6 +229,7 @@ async def test_configuration(
     current_user: Annotated[User, Depends(deps.get_current_active_user)],
     config_store: AIConfigurationStore = Depends(deps.get_config_store),
     logger: TLogger = Depends(deps.get_logger),
+    _rate_limit: None = Depends(rate_limit_ai_test),
 ):
     """
     Test an AI endpoint configuration with a sample request.

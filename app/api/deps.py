@@ -1,6 +1,6 @@
 from typing import Annotated, Optional
 
-from fastapi import Depends, HTTPException, status, Path
+from fastapi import Depends, HTTPException, status, Path, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from starlette.status import HTTP_403_FORBIDDEN
@@ -22,6 +22,14 @@ from app.modules.group_store import GroupStore
 from app.modules.reports_store import ReportsStore
 from app.modules.prompts_store import PromptCategoryStore, PromptStore, PromptSetStore
 from app.modules.configurations_store import AIConfigurationStore, AIProviderService
+from app.modules.rate_limiter import (
+    RateLimiter,
+    RateLimitConfig,
+    RateLimitStrategy,
+    InMemoryRateLimitBackend,
+    RedisRateLimitBackend,
+    RateLimitResult,
+)
 
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -300,3 +308,151 @@ def owner_or_admin_for_test(
             detail="Access denied: Test does not belong to your group"
         )
     return checker
+
+
+# ============================================================================
+# Rate Limiting
+# ============================================================================
+
+# Global rate limiter instance (initialized lazily)
+_rate_limiter: Optional[RateLimiter] = None
+
+
+def get_rate_limiter() -> RateLimiter:
+    """
+    Get the global rate limiter instance.
+    Initializes with Redis or in-memory backend based on settings.
+    """
+    global _rate_limiter
+
+    if _rate_limiter is None:
+        if settings.RATE_LIMIT_USE_REDIS:
+            try:
+                import redis
+                redis_client = redis.Redis(
+                    host=settings.REDIS_ADDRESS,
+                    port=settings.REDIS_PORT,
+                    decode_responses=True
+                )
+                # Test connection
+                redis_client.ping()
+                backend = RedisRateLimitBackend(redis_client)
+            except Exception:
+                # Fallback to in-memory if Redis unavailable
+                backend = InMemoryRateLimitBackend()
+        else:
+            backend = InMemoryRateLimitBackend()
+
+        _rate_limiter = RateLimiter(backend)
+
+        # Configure endpoint-specific rate limits from settings
+        _rate_limiter.configure_endpoint(
+            "login",
+            RateLimitConfig(
+                requests=settings.RATE_LIMIT_LOGIN_REQUESTS,
+                window_seconds=settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS,
+                block_seconds=settings.RATE_LIMIT_LOGIN_BLOCK_SECONDS,
+                strategy=RateLimitStrategy.IP
+            )
+        )
+        _rate_limiter.configure_endpoint(
+            "registration",
+            RateLimitConfig(
+                requests=settings.RATE_LIMIT_REGISTRATION_REQUESTS,
+                window_seconds=settings.RATE_LIMIT_REGISTRATION_WINDOW_SECONDS,
+                block_seconds=settings.RATE_LIMIT_REGISTRATION_BLOCK_SECONDS,
+                strategy=RateLimitStrategy.IP
+            )
+        )
+        _rate_limiter.configure_endpoint(
+            "password_reset",
+            RateLimitConfig(
+                requests=settings.RATE_LIMIT_PASSWORD_RESET_REQUESTS,
+                window_seconds=settings.RATE_LIMIT_PASSWORD_RESET_WINDOW_SECONDS,
+                block_seconds=settings.RATE_LIMIT_PASSWORD_RESET_BLOCK_SECONDS,
+                strategy=RateLimitStrategy.IP
+            )
+        )
+        _rate_limiter.configure_endpoint(
+            "ai_connection_test",
+            RateLimitConfig(
+                requests=settings.RATE_LIMIT_AI_TEST_REQUESTS,
+                window_seconds=settings.RATE_LIMIT_AI_TEST_WINDOW_SECONDS,
+                block_seconds=settings.RATE_LIMIT_AI_TEST_BLOCK_SECONDS,
+                strategy=RateLimitStrategy.IP_ENDPOINT
+            )
+        )
+
+    return _rate_limiter
+
+
+def get_client_ip(request: Request) -> str:
+    """Extract client IP from request, considering proxy headers."""
+    # Check for forwarded headers (in case of reverse proxy)
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        # Get the first IP in the chain (original client)
+        return forwarded.split(",")[0].strip()
+
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip
+
+    # Fallback to direct client
+    if request.client:
+        return request.client.host
+
+    return "unknown"
+
+
+def create_rate_limit_dependency(endpoint_name: str):
+    """
+    Factory to create rate limit dependencies for specific endpoints.
+
+    Usage:
+        @router.post("/login")
+        async def login(
+            rate_limit: None = Depends(create_rate_limit_dependency("login")),
+            ...
+        ):
+    """
+    async def rate_limit_check(
+        request: Request,
+        logger: TLogger = Depends(get_logger),
+    ) -> None:
+        if not settings.RATE_LIMIT_ENABLED:
+            return None
+
+        rate_limiter = get_rate_limiter()
+        client_ip = get_client_ip(request)
+
+        result = rate_limiter.check(
+            endpoint=endpoint_name,
+            ip=client_ip
+        )
+
+        if not result.allowed:
+            logger.warning(
+                f"Rate limit exceeded for {endpoint_name}: IP={client_ip}, "
+                f"retry_after={result.retry_after}s"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many requests. Please try again in {result.retry_after} seconds.",
+                headers={
+                    "Retry-After": str(result.retry_after),
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": str(int(result.reset_time))
+                }
+            )
+
+        return None
+
+    return rate_limit_check
+
+
+# Pre-built rate limit dependencies for common endpoints
+rate_limit_login = create_rate_limit_dependency("login")
+rate_limit_registration = create_rate_limit_dependency("registration")
+rate_limit_password_reset = create_rate_limit_dependency("password_reset")
+rate_limit_ai_test = create_rate_limit_dependency("ai_connection_test")

@@ -95,6 +95,7 @@ API Server For:
 - Password reset with time-limited codes
 - CORS protection
 - Environment-based configuration
+- Rate limiting for sensitive endpoints (login, registration, password reset, AI tests)
 
 ### Email Integration
 - AWS SES integration for transactional emails
@@ -133,6 +134,24 @@ For this application to run successfully, the following environment variables mu
 | FRONTEND_URL_BASE           | `http://localhost:3000`  | The base URL of the frontend application.                              |
 | UNLEASH_URL                 | -                        | Feature flags service URL (Unleash).                                   |
 | UNLEASH_INSTANCE_ID         | -                        | Feature flags instance ID.                                             |
+
+### Rate Limiting Variables
+| Variable                                | Default  | Description                                                  |
+|-----------------------------------------|----------|--------------------------------------------------------------|
+| RATE_LIMIT_ENABLED                      | `True`   | Enable/disable rate limiting globally.                       |
+| RATE_LIMIT_USE_REDIS                    | `False`  | Use Redis for distributed rate limiting (requires Redis).    |
+| RATE_LIMIT_LOGIN_REQUESTS               | `5`      | Max login attempts per window.                               |
+| RATE_LIMIT_LOGIN_WINDOW_SECONDS         | `60`     | Login rate limit window (seconds).                           |
+| RATE_LIMIT_LOGIN_BLOCK_SECONDS          | `300`    | Block duration after exceeding login limit (seconds).        |
+| RATE_LIMIT_REGISTRATION_REQUESTS        | `3`      | Max registration attempts per window.                        |
+| RATE_LIMIT_REGISTRATION_WINDOW_SECONDS  | `3600`   | Registration rate limit window (seconds).                    |
+| RATE_LIMIT_REGISTRATION_BLOCK_SECONDS   | `3600`   | Block duration after exceeding registration limit (seconds). |
+| RATE_LIMIT_PASSWORD_RESET_REQUESTS      | `3`      | Max password reset requests per window.                      |
+| RATE_LIMIT_PASSWORD_RESET_WINDOW_SECONDS| `3600`   | Password reset rate limit window (seconds).                  |
+| RATE_LIMIT_PASSWORD_RESET_BLOCK_SECONDS | `1800`   | Block duration after exceeding reset limit (seconds).        |
+| RATE_LIMIT_AI_TEST_REQUESTS             | `10`     | Max AI connection test requests per window.                  |
+| RATE_LIMIT_AI_TEST_WINDOW_SECONDS       | `60`     | AI test rate limit window (seconds).                         |
+| RATE_LIMIT_AI_TEST_BLOCK_SECONDS        | `60`     | Block duration after exceeding AI test limit (seconds).      |
 
 ### Legacy Variables (for Redis support)
 | Variable                    | Default                  | Description                                                            |
@@ -223,7 +242,6 @@ pytest test_production_integration.py --production -v
 ## Known Issues & TODOs
 - Test collection scheduling and automation (planned)
 - Advanced compliance framework mapping (planned)
-- Rate limiting for API endpoints (planned)
 
 ## Future Enhancements
 - Custom JavaScript support for AI connectors
