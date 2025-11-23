@@ -25,7 +25,13 @@ def setup_and_teardown(request: pytest.FixtureRequest):
     test_class_name = request.instance.__class__.__name__ if request.instance else ""
     
     # Skip for pure unit test classes
-    if test_class_name in ["TestAIConnectionService"]:
+    if test_class_name in [
+        "TestAIConnectionService",
+        "TestInMemoryRateLimitBackend",
+        "TestRateLimiter",
+        "TestPredefinedRateLimits",
+        "TestRedisRateLimitBackend",
+    ]:
         yield
         return
     
