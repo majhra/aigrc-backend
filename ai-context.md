@@ -41,9 +41,9 @@ This document provides complete context for the backend development of this MVP 
 #### Feature Flags (BASIC IMPLEMENTATION)
 - `GET /api/v1.0/feature-flags/proxy` - Get feature flags for user
 
-#### Basic AI Connection (IMPLEMENTED)
-- `POST /api/v1.0/ai-connection/test` - Test AI connection
-- Basic AI connection service with OpenAI integration
+#### AI Connection Testing (IMPLEMENTED)
+- `POST /api/v1.0/tests/connection/test` - Test AI connection configuration
+- AI connection service with support for multiple providers (OpenAI, Anthropic, Azure, etc.)
 
 #### AI Simulation Endpoints (NEW)
 - `POST /api/v1.0/simulation/v1/chat/completions` - OpenAI-compatible chat completions simulation
@@ -202,7 +202,7 @@ app/
 │   │   │   ├── user.py           # User management & auth
 │   │   │   ├── prompts.py        # Prompt library
 │   │   │   ├── configurations.py # AI endpoint configs
-│   │   │   ├── tests.py          # Test management
+│   │   │   ├── tests.py          # Test management & AI connection
 │   │   │   ├── reports.py        # Analytics & reports
 │   │   │   ├── simulation.py     # OpenAI simulation
 │   │   │   └── feature_flags.py  # Feature flags
@@ -210,23 +210,44 @@ app/
 │   ├── deps.py            # FastAPI dependencies
 │   └── utils.py           # API utilities
 ├── core/                  # Core configuration
-│   └── config.py          # Settings and environment config
+│   ├── config.py          # Settings and environment config
+│   ├── database.py        # Database setup and sessions
+│   └── validators.py      # Custom validators
+├── models/                # SQLAlchemy database models
+│   ├── user.py            # User and Group ORM models
+│   ├── test.py            # AITest and TestExecution models
+│   ├── prompt.py          # PromptCategory and Prompt models
+│   └── configuration.py   # AIConfiguration model
 ├── modules/               # Business logic modules
 │   ├── store_interface.py      # StoreProtocol base interface
 │   ├── sql_store.py            # PostgreSQL implementation
 │   ├── user_store.py           # User data operations
+│   ├── group_store.py          # Group management store
 │   ├── prompts_store.py        # Prompt management
 │   ├── configurations_store.py # AI config management
 │   ├── tests_store.py          # Test management
+│   ├── executions_store.py     # Test execution store
+│   ├── reports_store.py        # Reporting functionality
+│   ├── ai_connection_service.py # AI endpoint connection handler
 │   ├── email_service.py        # Email integration
 │   └── tlogger.py              # Logging utilities
 ├── schemas/               # Pydantic models for data validation
+│   ├── user.py
+│   ├── tests.py
+│   ├── prompts.py
+│   ├── configurations.py
+│   ├── executions.py
+│   ├── reports.py
+│   └── feature_flags.py
 ├── assets/                # Static assets (email templates, etc.)
-├── alembic/               # Database migration files
 ├── main.py                # FastAPI application entry point
-├── requirements/          # Dependencies (base.txt, dev.txt)
-├── tests/                 # Test suite
-└── alembic.ini           # Alembic configuration
+alembic/                   # Database migration files
+├── versions/              # Migration files
+├── env.py
+└── script.py.mako
+requirements/              # Dependencies (base.txt, dev.txt)
+tests/                     # Test suite
+alembic.ini               # Alembic configuration
 ```
 
 ### Core Features & Screens
@@ -314,8 +335,8 @@ app/
 3. **Feature Flags:** (api/api_v1/endpoints/feature_flags.py)
    - `GET /api/v1.0/feature-flags/proxy` - Get feature flags for user
 
-4. **AI Connection:** (api/api_v1/endpoints/ai_connection.py)
-   - `POST /api/v1.0/ai-connection/test` - Test AI connection
+4. **AI Connection Testing:** (api/api_v1/endpoints/tests.py)
+   - `POST /api/v1.0/tests/connection/test` - Test AI connection configuration
 
 5. **Prompts:** (api/api_v1/endpoints/prompts.py) - ✅ COMPLETE
    - `GET /api/v1.0/prompts/categories` - List prompt categories with pagination
@@ -475,20 +496,11 @@ app/
        }
        ```
 
-7. **Configuration:**
-   - GET /api/configurations
-   - GET /api/configurations/{id}
-   - POST /api/configurations
-   - PUT /api/configurations/{id}
+7. **Configuration:** (api/api_v1/endpoints/configurations.py) - ✅ COMPLETE
+   - See section 7 above for complete API documentation
 
-8. **Prompts:** (api/api_v1/endpoints/prompts.py)
-   - GET /api/prompts/categories
-   - GET /api/prompts/categories/{id}
-   - POST /api/prompts/categories
-   - PUT /api/prompts/categories/{id}
-   - GET /api/prompts/{id}
-   - POST /api/prompts/
-   - PUT /api/prompts/{id}
+8. **Prompts:** (api/api_v1/endpoints/prompts.py) - ✅ COMPLETE
+   - See section 5 above for complete API documentation
 
 9. **Reports:** (api/api_v1/endpoints/reports.py)
    - `GET /api/v1.0/reports/summary` - Get summary report of tests and executions

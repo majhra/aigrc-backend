@@ -36,14 +36,57 @@ API Server For:
 #### Feature Flags
 - `GET /api/v1.0/feature-flags/proxy` - Get feature flags for user
 
-#### Model Testing
-- `POST /api/v1.0/model/tests` - Execute model tests
+#### Prompt Management
+- `GET /api/v1.0/prompts/categories` - List prompt categories
+- `GET /api/v1.0/prompts/categories/{category_id}` - Get specific category
+- `POST /api/v1.0/prompts/categories` - Create prompt category
+- `PUT /api/v1.0/prompts/categories/{category_id}` - Update prompt category
+- `DELETE /api/v1.0/prompts/categories/{category_id}` - Delete prompt category
+- `GET /api/v1.0/prompts/` - List all prompts
+- `GET /api/v1.0/prompts/{prompt_id}` - Get specific prompt
+- `POST /api/v1.0/prompts/` - Create new prompt
+- `PUT /api/v1.0/prompts/{prompt_id}` - Update prompt
+- `DELETE /api/v1.0/prompts/{prompt_id}` - Delete prompt
+- `POST /api/v1.0/prompts/validate` - Validate prompt template
+- `POST /api/v1.0/prompts/preview` - Preview prompt with variables
+
+#### Test Management
+- `GET /api/v1.0/tests` - List all tests with pagination and filtering
+- `GET /api/v1.0/tests/{test_id}` - Get test details
+- `POST /api/v1.0/tests` - Create new test
+- `PUT /api/v1.0/tests/{test_id}` - Update test
+- `DELETE /api/v1.0/tests/{test_id}` - Delete test
+- `POST /api/v1.0/tests/{test_id}/execute` - Execute a test
+- `GET /api/v1.0/tests/{test_id}/executions` - Get test executions
+- `POST /api/v1.0/tests/connection/test` - Test AI connection configuration
+
+#### AI Configuration Management
+- `GET /api/v1.0/configurations/` - List AI endpoint configurations
+- `GET /api/v1.0/configurations/{config_id}` - Get specific configuration
+- `POST /api/v1.0/configurations/` - Create new configuration
+- `PUT /api/v1.0/configurations/{config_id}` - Update configuration
+- `DELETE /api/v1.0/configurations/{config_id}` - Delete configuration
+- `POST /api/v1.0/configurations/test` - Test AI endpoint configuration
+- `POST /api/v1.0/configurations/validate` - Validate configuration
+- `GET /api/v1.0/configurations/providers` - Get available AI providers
+- `GET /api/v1.0/configurations/templates` - Get configuration templates
+
+#### Reports & Analytics
+- `GET /api/v1.0/reports/summary` - Get summary report
+- `GET /api/v1.0/reports/trends` - Get execution trends
+- `GET /api/v1.0/reports/performance` - Get performance metrics
+
+#### AI Simulation
+- `POST /api/v1.0/simulation/v1/chat/completions` - OpenAI-compatible chat simulation
+- `GET /api/v1.0/simulation/v1/models` - List available models
 
 ### Storage
-- Currently using a local store implementation for tests. Redis for persistant storage
-- UUID-based user identification
-- Email-based user lookup
-- Support for pagination in user listing
+- PostgreSQL database with SQLAlchemy ORM
+- Database migrations managed with Alembic
+- UUID-based identification with efficient indexing
+- Email-based user lookup with optimized queries
+- Support for pagination, filtering, and complex queries
+- Multi-tenant architecture with group-based data segregation
 
 ### Security Features
 - JWT token-based authentication
@@ -66,20 +109,36 @@ API Server For:
 
 ## Environment Variables
 For this application to run successfully, the following environment variables must be specified (.env file will automatically be loaded):
-| Variable                    | Value                                                                                               |
+
+### Required Variables
+| Variable                    | Description                                                                                         |
 |-----------------------------|-----------------------------------------------------------------------------------------------------|
 | SECRET_KEY                  | The secret key used for JWT encode/decode.                                                          |
-| ALGORITHM                   | The algorithm used for JWT encode/decode (default is `HS256`).                                      |
-| ACCESS_TOKEN_EXPIRE_MINUTES | The number of minutes until a JWT expires (default is `30`).                                        |
-| REDIS_ADDRESS               | The URL for the Redis database (default is `localhost`).                                            |
-| REDIS_PORT                  | The port for the Redis database (default is `6379`).                                                |
-| ORIGINS                     | A comma seperated list of whitelisted origin URLs (e.g., `http://localhost,http://localhost:3000`). |
+| DATABASE_URL                | PostgreSQL connection string (e.g., `postgresql://user:pass@localhost:5432/aigrc`).                 |
 | SES_AWS_ACCESS_KEY_ID       | AWS IAM access key ID (used for boto3 package).                                                     |
 | SES_AWS_SECRET_ACCESS_KEY   | AWS IAM secret access key (used for boto3 package).                                                 |
 | SES_AWS_SENDER_EMAIL        | The email address to send the verification emails (this email must be setup with the SES service).  |
-| SES_AWS_REGION              | The AWS region for the SES service (default is `ap-southeast-2`).                                   |
-| FRONTEND_URL_BASE           | The base URL of the Riskify website page (default is `http://localhost:3000`).                      |
-| SUPPORT_EMAIL               | The email address that support requests get sent to (default is `goricoaico@gmail.com`)             |
+| SUPPORT_EMAIL               | The email address that support requests get sent to.                                                |
+
+### Optional Variables
+| Variable                    | Default                  | Description                                                            |
+|-----------------------------|--------------------------|------------------------------------------------------------------------|
+| ALGORITHM                   | `HS256`                  | The algorithm used for JWT encode/decode.                              |
+| ACCESS_TOKEN_EXPIRE_MINUTES | `30`                     | The number of minutes until a JWT expires.                             |
+| DATABASE_POOL_SIZE          | `10`                     | Database connection pool size.                                         |
+| DATABASE_MAX_OVERFLOW       | `20`                     | Maximum overflow connections for the database pool.                    |
+| DATABASE_ECHO               | `False`                  | Enable SQL query logging (for debugging).                              |
+| ORIGINS                     | `localhost,localhost:3000` | Comma separated list of whitelisted origin URLs for CORS.            |
+| SES_AWS_REGION              | `ap-southeast-2`         | The AWS region for the SES service.                                    |
+| FRONTEND_URL_BASE           | `http://localhost:3000`  | The base URL of the frontend application.                              |
+| UNLEASH_URL                 | -                        | Feature flags service URL (Unleash).                                   |
+| UNLEASH_INSTANCE_ID         | -                        | Feature flags instance ID.                                             |
+
+### Legacy Variables (for Redis support)
+| Variable                    | Default                  | Description                                                            |
+|-----------------------------|--------------------------|------------------------------------------------------------------------|
+| REDIS_ADDRESS               | `localhost`              | The URL for the Redis database.                                        |
+| REDIS_PORT                  | `6379`                   | The port for the Redis database.                                       |
 
 ## Local Development
 
@@ -96,8 +155,30 @@ Comment out AWS Docker and remove comment for Local in server/Dockerfile
 
 you can then connect to it via http://127.0.0.1:8888/docs
 
-### Running Redis Locally
-`docker run -d --rm --name redis-stack -p 6379:6379 -p 8001:8001 redis/redis-stack:latest`  
+### Running PostgreSQL Locally
+```bash
+docker run -d --name aigrc-postgres \
+  -e POSTGRES_USER=aigrc \
+  -e POSTGRES_PASSWORD=aigrc \
+  -e POSTGRES_DB=aigrc \
+  -p 5432:5432 \
+  postgres:15
+```
+This will launch a PostgreSQL server. Set your `DATABASE_URL` to `postgresql://aigrc:aigrc@localhost:5432/aigrc`.
+
+### Running Database Migrations
+```bash
+# Apply all migrations
+alembic upgrade head
+
+# Create a new migration (after model changes)
+alembic revision --autogenerate -m "Description of changes"
+```
+
+### Running Redis Locally (Legacy)
+```bash
+docker run -d --rm --name redis-stack -p 6379:6379 -p 8001:8001 redis/redis-stack:latest
+```
 This will launch a Redis server and will be automatically deleted after the container exits. Visit [http://localhost:8001/](http://localhost:8001/) to view the RedisInsight dashboard.
 
 ### Running Tests
@@ -140,19 +221,19 @@ pytest test_production_integration.py --production -v
 **Note**: Production tests require the `--production` flag to prevent accidental execution during regular development. They test against the actual backend service and perform comprehensive validation of all API endpoints, security, and performance characteristics.
 
 ## Known Issues & TODOs
-- Admin role check needs to be implemented for user management endpoints
-- User listing endpoint currently uses test data (needs to be connected to actual storage)
-- Email sender configuration needs to be reviewed
-- Authorization checks needed for user operations (admin or self)
+- Test collection scheduling and automation (planned)
+- Advanced compliance framework mapping (planned)
+- Rate limiting for API endpoints (planned)
 
 ## Future Enhancements
-- Implement proper role-based access control
-- Add database integration for persistent storage
-- Enhance user management with more granular permissions
-- Add audit logging for user actions
-- Implement rate limiting for API endpoints
-- Add API versioning strategy
-- Enhance test coverage
+- Custom JavaScript support for AI connectors
+- Advanced validation criteria
+- Automated test scheduling
+- Enhanced analytics and visualization
+- Compliance template library
+- Integration with other GRC tools
+- Advanced AI model testing capabilities
+- Audit logging for user actions
 
 
 ### Setup first user example:
