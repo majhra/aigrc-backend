@@ -207,12 +207,17 @@ This will launch a Redis server and will be automatically deleted after the cont
 # Install test dependencies
 pip install -r requirements/dev.txt
 
-# Run unit and integration tests
-python -m pytest
+# Run unit and integration tests (disable rate limiting to avoid test failures)
+RATE_LIMIT_ENABLED=false python -m pytest
 
 # Run with coverage
-pytest --cov=app
+RATE_LIMIT_ENABLED=false pytest --cov=app
+
+# Run a specific test file
+RATE_LIMIT_ENABLED=false python -m pytest tests/modules/test_rate_limiter.py -v
 ```
+
+**Note**: Set `RATE_LIMIT_ENABLED=false` when running tests to prevent rate limiting from blocking repeated test requests. Rate limiting should remain enabled in production.
 
 #### Production Integration Tests
 For comprehensive production-level testing against the live backend:
